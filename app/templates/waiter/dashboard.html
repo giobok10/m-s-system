@@ -1,0 +1,79 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Dashboard Mesero{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-clipboard-list"></i> Órdenes Activas</h2>
+    <a href="{{ url_for('waiter.take_order') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Nueva Orden
+    </a>
+</div>
+
+<div class="row">
+    {% for order in active_orders %}
+    <div class="col-md-6 col-lg-4 mb-4" id="order-card-{{ order.id }}">
+        <div class="card border-{{ 'primary' if order.status == 'pending' else 'warning' if order.status == 'sent_to_kitchen' else 'info' if order.status == 'in_preparation' else 'success' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Orden #{{ order.id }}</h6>
+                <span class="badge bg-{{ 'primary' if order.status == 'pending' else 'warning' if order.status == 'sent_to_kitchen' else 'info' if order.status == 'in_preparation' else 'success' }}">
+                    {{ order.status.replace('_', ' ').title() }}
+                </span>
+            </div>
+            <div class="card-body">
+                <p><strong>Cliente:</strong> {{ order.customer_name or 'Sin nombre' }}</p>
+                <p><strong>Total:</strong> Q{{ "%.2f"|format(order.total) }}</p>
+                <p><strong>Hora:</strong> {{ order.created_at|datetime_local(format='%H:%M') }}</p>
+                
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('waiter.view_order', order_id=order.id) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-eye"></i> Ver Detalles
+                    </a>
+                    
+                    {% if order.status == 'ready' %}
+                    <a href="{{ url_for('waiter.process_payment', order_id=order.id) }}" class="btn btn-success btn-sm">
+                        <i class="fas fa-cash-register"></i> Procesar Pago
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="row">
+    {% for order in completed_orders %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card border-success">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Orden #{{ order.id }}</h6>
+                <span class="badge bg-success">
+                    <i class="fas fa-check-circle"></i> Pagada
+                </span>
+            </div>
+            <div class="card-body">
+                <p><strong>Cliente:</strong> {{ order.customer_name or 'Sin nombre' }}</p>
+                <p><strong>Total:</strong> Q{{ "%.2f"|format(order.total) }}</p>
+                <p><strong>Hora:</strong> {{ order.created_at|datetime_local(format='%H:%M') }}</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('waiter.view_order', order_id=order.id) }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-eye"></i> Ver Detalles
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="text-center py-5">
+            <i class="fas fa-history fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">No has completado órdenes hoy</h4>
+            <p class="text-muted">Las órdenes que pages aparecerán aquí.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+

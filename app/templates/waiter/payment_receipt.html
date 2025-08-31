@@ -1,0 +1,51 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Recibo de Pago{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card text-center">
+                <div class="card-header">
+                    <h3>Recibo de Pago</h3>
+                </div>
+                <div class="card-body">
+                    <h4 class="card-title">¡Pago Exitoso!</h4>
+                    <p>Orden #{{ order.id }}</p>
+                    <hr>
+                    <div class="text-start">
+                        <p><strong>Cliente:</strong> {{ order.customer_name or 'No especificado' }}</p>
+                        <p><strong>Mesero:</strong> {{ order.waiter.full_name }}</p>
+                        <p><strong>Fecha:</strong> {{ order.created_at|datetime_local }}</p>
+                    </div>
+                    <hr>
+                    <h5>Resumen</h5>
+                    <ul class="list-group list-group-flush mb-3">
+                        {% for item in order.items %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{ item.product.name }} (x{{ item.quantity }})</span>
+                            <span>Q{{ "%.2f"|format(item.unit_price * item.quantity) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                     <hr>
+                    <div class="text-end">
+                        <p><strong>Total:</strong> Q{{ "%.2f"|format(order.total) }}</p>
+                        <p><strong>Efectivo Recibido:</strong> Q{{ "%.2f"|format(cash_received) }}</p>
+                        <p><strong>Cambio:</strong> Q{{ "%.2f"|format(change) }}</p>
+                    </div>
+                </div>
+                <div class="card-footer text-muted">
+                    <a href="{{ url_for('waiter.receipt_pdf', order_id=order.id, cash_received=cash_received, change=change) }}" class="btn btn-secondary" target="_blank">
+                        <i class="fas fa-file-pdf"></i> Generar PDF
+                    </a>
+                    <a href="{{ url_for('waiter.dashboard') }}" class="btn btn-primary">
+                        <i class="fas fa-th-large"></i> Ir al Panel de Mesero
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Dashboard Administrador{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-tachometer-alt"></i> Dashboard Administrador</h2>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ today_orders }}</h4>
+                        <p>Órdenes Hoy</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-shopping-cart fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>Q{{ "%.2f"|format(today_sales) }}</h4>
+                        <p>Ventas Hoy</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-dollar-sign fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ low_stock_products|length }}</h4>
+                        <p>Stock Bajo</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if low_stock_products %}
+<div class="card">
+    <div class="card-header">
+        <h5><i class="fas fa-exclamation-triangle text-warning"></i> Productos con Stock Bajo</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Categoría</th>
+                        <th>Stock Actual</th>
+                        <th>Precio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in low_stock_products %}
+                    <tr>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.category }}</td>
+                        <td><span class="badge bg-warning">{{ product.stock }}</span></td>
+                        <td>
+                            {% if product.price is not none %}
+                                Q{{ "%.2f"|format(product.price) }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-cash-register fa-3x text-primary mb-3"></i>
+                <h5>Cierre Diario</h5>
+                <p class="text-muted">Realizar el cierre de caja del día</p>
+                <a href="{{ url_for('admin.daily_close') }}" class="btn btn-primary">Ir a Cierre</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-bar fa-3x text-success mb-3"></i>
+                <h5>Reportes</h5>
+                <p class="text-muted">Ver reportes de ventas y estadísticas</p>
+                <a href="{{ url_for('admin.reports') }}" class="btn btn-success">Ver Reportes</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

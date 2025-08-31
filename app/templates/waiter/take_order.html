@@ -1,0 +1,396 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Tomar Orden{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Menu Column -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-utensils"></i> Menú</h5>
+            </div>
+            <div class="card-body">
+                {% for category in ['Principal', 'Bebida'] %}
+                <h6 class="text-primary">{{ category }}</h6>
+                <div class="row mb-4">
+                    {% for product in products if product.category == category %}
+                    <div class="col-md-6 mb-2">
+                        <div class="card product-card"
+                             data-product-id="{{ product.id }}"
+                             data-product-name="{{ product.name }}"
+                             data-product-price="{{ product.price if product.price is not none else 0 }}"
+                             data-product-category="{{ product.category }}"
+                             data-product-stock="{{ product.stock }}"
+                             data-variants='{{ product.variants_as_dicts | tojson }}'>
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">{{ product.name }}</h6>
+                                        {% if product.category == 'Principal' %}
+                                            <small class="text-{{ 'success' if product.stock > 5 else 'warning' if product.stock > 0 else 'danger' }}" data-stock-id="{{ product.id }}">
+                                                Stock Base: {{ product.stock }}
+                                            </small>
+                                        {% else %}
+                                            <p class="mb-0 text-muted">Q{{ "%.2f"|format(product.price) }}</p>
+                                            <small class="text-{{ 'success' if product.stock > 5 else 'warning' if product.stock > 0 else 'danger' }}" data-stock-id="{{ product.id }}">
+                                                Stock: {{ product.stock }}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                    <button class="btn btn-outline-primary btn-sm add-product-btn" {{ 'disabled' if product.stock == 0 else '' }}>
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Order Column -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-shopping-cart"></i> Orden Actual</h5>
+            </div>
+            <div class="card-body">
+                <form id="orderForm" method="POST" action="{{ url_for('waiter.create_order') }}">
+                    <div class="mb-3">
+                        <label for="customer_name" class="form-label">Nombre del Cliente</label>
+                        <input type="text" class="form-control" id="customer_name" name="customer_name">
+                    </div>
+                    <div id="orderItems">
+                        <p class="text-muted text-center">No hay productos seleccionados</p>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <strong>Total: Q<span id="orderTotal">0.00</span></strong>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary" id="createOrderBtn" disabled>
+                            <i class="fas fa-check"></i> Crear Orden
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Variant Selection Modal -->
+<div class="modal fade" id="variantModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="variantModalTitle">Seleccionar Variante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="variantModalBody">
+                <!-- Variants will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Quantity & Extras Modal -->
+<div class="modal fade" id="quantityModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quantityModalTitle">Agregar Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="quantity" class="form-label">Cantidad</label>
+                    <input type="number" class="form-control" id="quantity" min="1" value="1">
+                    <small class="text-muted">Stock disponible: <span id="availableStock"></span></small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Extras</label>
+                    <div id="extrasContainer">
+                        {% for extra in extras %}
+                        <div class="form-check">
+                            <input class="form-check-input extra-checkbox" type="checkbox" value="{{ extra.id }}" id="extra-{{ extra.id }}" data-extra-name="{{ extra.name }}" data-extra-price="{{ extra.price }}" data-extra-stock="{{ extra.stock }}">
+                            <label class="form-check-label" for="extra-{{ extra.id }}">
+                                {{ extra.name }} (+Q{{ "%.2f"|format(extra.price) }})
+                                <small class="text-muted ms-2" data-stock-id="{{ extra.id }}"></small>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notas Especiales</label>
+                    <textarea class="form-control" id="notes" rows="2" placeholder="Ej: sin cebolla"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="addToOrderBtn">Agregar a Orden</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let orderItems = [];
+let currentProduct = null; // Will hold the product or variant to be added
+let baseProduct = null; // Will hold the base product when a variant is selected
+
+const quantityModal = new bootstrap.Modal(document.getElementById('quantityModal'));
+const variantModal = new bootstrap.Modal(document.getElementById('variantModal'));
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.add-product-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const card = this.closest('.product-card');
+            const category = card.dataset.productCategory;
+
+            if (category === 'Principal') {
+                openVariantModal(card);
+            } else {
+                openQuantityModal(card);
+            }
+        });
+    });
+    
+    document.getElementById('addToOrderBtn').addEventListener('click', addToOrder);
+    document.getElementById('orderForm').addEventListener('submit', submitOrder);
+});
+
+function openVariantModal(card) {
+    baseProduct = card.dataset;
+    const variants = JSON.parse(baseProduct.variants);
+    
+    document.getElementById('variantModalTitle').textContent = `Seleccionar variante para ${baseProduct.productName}`;
+    const body = document.getElementById('variantModalBody');
+    body.innerHTML = '';
+
+    if (variants.length === 0) {
+        body.innerHTML = '<p class="text-muted">Este producto no tiene variantes definidas.</p>';
+    } else {
+        variants.forEach(variant => {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-outline-primary w-100 mb-2';
+            btn.textContent = `${variant.name} - Q${variant.price.toFixed(2)}`;
+            btn.onclick = () => {
+                currentProduct = variant;
+                variantModal.hide();
+                openQuantityModal(card, variant);
+            };
+            body.appendChild(btn);
+        });
+    }
+    variantModal.show();
+}
+
+function openQuantityModal(card, variant = null) {
+    const cardData = card.dataset;
+    currentProduct = variant ? variant : {
+        id: cardData.productId,
+        name: cardData.productName,
+        price: parseFloat(cardData.productPrice),
+        stock: parseInt(cardData.productStock),
+        is_base_product: true
+    };
+
+    let stockToCheck, consumptionRate, baseProductId;
+    if (variant) {
+        baseProduct = cardData;
+        stockToCheck = parseInt(baseProduct.productStock);
+        consumptionRate = currentProduct.stock_consumption;
+        baseProductId = baseProduct.productId;
+    } else {
+        stockToCheck = currentProduct.stock;
+        consumptionRate = 1;
+        baseProductId = null;
+    }
+
+    const quantityInCart = getQuantityInCart(currentProduct.id, baseProductId);
+    const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
+
+    document.getElementById('quantityModalTitle').textContent = 'Agregar ' + currentProduct.name;
+    document.getElementById('availableStock').textContent = availableStockUnits;
+    
+    const quantityInput = document.getElementById('quantity');
+    quantityInput.max = availableStockUnits > 0 ? availableStockUnits : 0;
+    quantityInput.value = 1;
+    quantityInput.disabled = availableStockUnits <= 0;
+    document.getElementById('addToOrderBtn').disabled = availableStockUnits <= 0;
+
+    document.querySelectorAll('#extrasContainer .form-check').forEach(formCheck => {
+        const checkbox = formCheck.querySelector('.extra-checkbox');
+        const extraId = checkbox.value;
+        const extraStock = parseInt(checkbox.dataset.extraStock);
+        const extraQuantityInCart = getExtraQuantityInCart(extraId);
+        const availableExtraStock = extraStock - extraQuantityInCart;
+        
+        const label = formCheck.querySelector('label small');
+        if (availableExtraStock <= 0) {
+            label.textContent = ' (Agotado)';
+            checkbox.disabled = true;
+            checkbox.checked = false;
+        } else {
+            label.textContent = ` (Stock: ${availableExtraStock})`;
+            checkbox.disabled = false;
+            checkbox.checked = false;
+        }
+    });
+
+    document.getElementById('notes').value = '';
+    quantityModal.show();
+}
+
+function addToOrder() {
+    const quantity = parseInt(document.getElementById('quantity').value);
+    if (quantity <= 0) return;
+
+    const notes = document.getElementById('notes').value;
+    let itemPrice = currentProduct.price;
+    const selectedExtras = [];
+    const extraNames = [];
+
+    document.querySelectorAll('.extra-checkbox:checked').forEach(cb => {
+        itemPrice += parseFloat(cb.dataset.extraPrice);
+        selectedExtras.push({ id: cb.value, name: cb.dataset.extraName, price: parseFloat(cb.dataset.extraPrice) });
+        extraNames.push(cb.dataset.extraName);
+    });
+
+    const item = {
+        product_id: currentProduct.id,
+        name: currentProduct.name,
+        price: itemPrice,
+        quantity: quantity,
+        extras: selectedExtras,
+        notes: notes,
+        total: itemPrice * quantity,
+        is_variant: !currentProduct.is_base_product,
+        base_product_id: baseProduct ? baseProduct.productId : null,
+        stock_consumption: currentProduct.stock_consumption || 1,
+        displayExtras: extraNames.join(', ')
+    };
+
+    orderItems.push(item);
+    updateOrderDisplay();
+    quantityModal.hide();
+}
+
+function getQuantityInCart(productId, baseProductId = null) {
+    let totalConsumption = 0;
+    orderItems.forEach(item => {
+        if (baseProductId) {
+            if (item.base_product_id === baseProductId) {
+                totalConsumption += item.quantity * item.stock_consumption;
+            }
+        } else {
+            if (String(item.product_id) === String(productId)) {
+                totalConsumption += item.quantity;
+            }
+        }
+    });
+    return totalConsumption;
+}
+
+function getExtraQuantityInCart(extraId) {
+    let total = 0;
+    orderItems.forEach(item => {
+        if (item.extras) {
+            item.extras.forEach(extra => {
+                if (String(extra.id) === String(extraId)) {
+                    total += item.quantity;
+                }
+            });
+        }
+    });
+    return total;
+}
+
+function updateOrderDisplay() {
+    const container = document.getElementById('orderItems');
+    const totalElement = document.getElementById('orderTotal');
+    const createBtn = document.getElementById('createOrderBtn');
+
+    if (orderItems.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">No hay productos seleccionados</p>';
+        totalElement.textContent = '0.00';
+        createBtn.disabled = true;
+    } else {
+        let html = '';
+        let total = 0;
+        orderItems.forEach((item, index) => {
+            html += `
+                <div class="d-flex justify-content-between align-items-start mb-2 p-2 border rounded">
+                    <div>
+                        <strong>${item.name}</strong><br>
+                        <small class="text-muted">Cant: ${item.quantity} | Q${item.price.toFixed(2)} c/u</small>
+                        ${item.displayExtras ? `<br><small class="text-muted">Extras: ${item.displayExtras}</small>` : ''}
+                        ${item.notes ? `<br><small class="text-info">Notas: ${item.notes}</small>` : ''}
+                    </div>
+                    <div class="text-end">
+                        <strong>Q${item.total.toFixed(2)}</strong><br>
+                        <button type="button" class="btn btn-sm btn-outline-danger mt-1" onclick="removeItem(${index})"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>`;
+            total += item.total;
+        });
+        container.innerHTML = html;
+        totalElement.textContent = total.toFixed(2);
+        createBtn.disabled = false;
+    }
+    updateAllCardStocks();
+}
+
+function removeItem(index) {
+    orderItems.splice(index, 1);
+    updateOrderDisplay();
+}
+
+function updateAllCardStocks() {
+    document.querySelectorAll('.product-card').forEach(card => {
+        const productId = card.dataset.productId;
+        const stockElement = card.querySelector(`[data-stock-id="${productId}"]`);
+        const initialStock = parseInt(card.dataset.productStock);
+        const consumed = getQuantityInCart(productId, card.dataset.productCategory === 'Principal' ? productId : null);
+        const remaining = initialStock - consumed;
+        
+        if (card.dataset.productCategory === 'Principal') {
+            stockElement.textContent = `Stock Base: ${remaining}`;
+        } else {
+            stockElement.textContent = `Stock: ${remaining}`;
+        }
+        card.querySelector('.add-product-btn').disabled = remaining <= 0;
+    });
+}
+
+function submitOrder(e) {
+    if (orderItems.length === 0) {
+        e.preventDefault();
+        alert("No se puede crear una orden vacía.");
+        return;
+    }
+    this.querySelectorAll('input[name="items"]').forEach(inp => inp.remove());
+    orderItems.forEach(item => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'items';
+        const submitItem = { 
+            product_id: item.product_id, 
+            quantity: item.quantity, 
+            extras: item.extras, 
+            notes: item.notes 
+        };
+        input.value = JSON.stringify(submitItem);
+        this.appendChild(input);
+    });
+}
+</script>
+{% endblock %}

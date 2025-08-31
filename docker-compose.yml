@@ -1,0 +1,14 @@
+services:
+  restaurant-app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./instance:/app/instance
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=your-secret-key-change-this-in-production
+    restart: unless-stopped
+
+volumes:
+  db_data:

@@ -1,0 +1,38 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Reportes de Ventas{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Reportes de Ventas</h2>
+
+    <div class="d-flex mb-4">
+        <a href="{{ url_for('admin.reports', period='weekly') }}" 
+           class="btn {{ 'btn-primary' if period == 'weekly' else 'btn-secondary' }} me-2">
+            Reporte Semanal
+        </a>
+        <a href="{{ url_for('admin.reports', period='monthly') }}" 
+           class="btn {{ 'btn-primary' if period == 'monthly' else 'btn-secondary' }}">
+            Reporte Mensual
+        </a>
+    </div>
+
+    {% if report_data %}
+    <div class="card p-4 shadow">
+        <h5 class="mb-2">{{ report_data.periodo }}</h5>
+        <div>
+            <p><strong>Producto más vendido:</strong> {{ report_data.producto_mas_vendido }}</p>
+            <p><strong>Día con más ventas:</strong> {{ report_data.dia_mas_ventas }}</p>
+        </div>
+        <div class="mt-4">
+            <a href="{{ url_for('admin.reports', period=period, download='true') }}" 
+               class="btn btn-success">
+                Descargar PDF
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <p>No hay datos de ventas para el período seleccionado.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Cierre Diario{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-cash-register"></i> Cierre de Caja Diario</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h4>Q{{ "%.2f"|format(total_sales) }}</h4>
+                                <p>Total de Ventas del Día</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        {% if daily_report %}
+                        <div class="card bg-{{ 'success' if daily_report.difference == 0 else 'warning' if daily_report.difference > 0 else 'danger' }} text-white">
+                            <div class="card-body text-center">
+                                <h4>Q{{ "%.2f"|format(daily_report.difference) }}</h4>
+                                <p>{{ 'Balance Perfecto' if daily_report.difference == 0 else 'Sobrante' if daily_report.difference > 0 else 'Faltante' }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="cash_in_register" class="form-label">Efectivo en Caja (Q)</label>
+                        <input type="number" step="0.01" class="form-control" id="cash_in_register" name="cash_in_register" 
+                               value="{{ daily_report.cash_in_register if daily_report else '' }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> {{ 'Actualizar' if daily_report else 'Registrar' }} Cierre
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6>Información</h6>
+            </div>
+            <div class="card-body">
+                <p><strong>Fecha:</strong> {{ today_date }}</p>
+                {% if daily_report %}
+                <p><strong>Efectivo Registrado:</strong> Q{{ "%.2f"|format(daily_report.cash_in_register) }}</p>
+                <p><strong>Diferencia:</strong> 
+                    <span class="text-{{ 'success' if daily_report.difference == 0 else 'warning' if daily_report.difference > 0 else 'danger' }}">
+                        Q{{ "%.2f"|format(daily_report.difference) }}
+                    </span>
+                </p>
+                {% endif %}
+                
+                <hr>
+                <div class="d-grid">
+                    <a href="{{ url_for('admin.daily_close', download='pdf') }}" class="btn btn-outline-primary {% if not daily_report %}disabled{% endif %}">
+                        <i class="fas fa-file-pdf"></i> Generar Reporte PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function generateReport() {
+    // This would trigger PDF generation
+    alert('Funcionalidad de PDF en desarrollo');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,382 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required, current_user
+from app.models import User, Product, Order, OrderItem, DailyReport
+from app.services.report_service import generate_daily_report_pdf, generate_sales_report_pdf
+from app import db, socketio
+from datetime import datetime, date, timedelta
+from werkzeug.security import generate_password_hash
+import bleach
+from functools import wraps
+
+admin_bp = Blueprint('admin', __name__)
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            flash('Acceso denegado. Solo administradores.', 'error')
+            return redirect(url_for('auth.login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@admin_bp.route('/dashboard')
+@login_required
+@admin_required
+def dashboard():
+    # Get today's stats
+    today = date.today()
+    today_orders = Order.query.filter(
+        db.func.date(Order.created_at) == today,
+        Order.status == 'paid'
+    ).count()
+    
+    today_sales = db.session.query(db.func.sum(Order.total)).filter(
+        db.func.date(Order.created_at) == today,
+        Order.status == 'paid'
+    ).scalar() or 0
+    
+    low_stock_products = Product.query.filter(Product.parent_id.is_(None), Product.stock <= 5, Product.is_active == True).all()
+    
+    return render_template('admin/dashboard.html', 
+                         today_orders=today_orders,
+                         today_sales=today_sales,
+                         low_stock_products=low_stock_products)
+
+@admin_bp.route('/menu')
+@login_required
+@admin_required
+def menu():
+    products = Product.query.filter(Product.parent_id.is_(None), Product.is_active==True).order_by(Product.category, Product.name).all()
+    return render_template('admin/menu.html', products=products)
+
+@admin_bp.route('/add_product', methods=['POST'])
+@login_required
+@admin_required
+def add_product():
+    name = bleach.clean(request.form.get('name', '').strip())
+    price_str = request.form.get('price', '0')
+    category = bleach.clean(request.form.get('category', '').strip())
+    stock_str = request.form.get('stock', '0')
+    
+    try:
+        if not name or not category in ['Principal', 'Bebida', 'Extra']:
+            flash('Nombre y categoría son requeridos.', 'error')
+            return redirect(url_for('admin.menu'))
+
+        stock = int(stock_str)
+
+        if category == 'Principal':
+            # Base products have no price, only stock
+            product = Product(name=name, price=None, category=category, stock=stock, parent_id=None)
+            flash_message = 'Producto base agregado exitosamente.'
+        else:
+            # Simple products (Bebida, Extra) have a price
+            price = float(price_str)
+            if price <= 0:
+                flash('El precio para bebidas/extras debe ser mayor a cero.', 'error')
+                return redirect(url_for('admin.menu'))
+            product = Product(name=name, price=price, category=category, stock=stock, parent_id=None)
+            flash_message = 'Producto agregado exitosamente.'
+
+        db.session.add(product)
+        db.session.commit()
+        
+        flash(flash_message, 'success')
+    except ValueError:
+        flash('Error en los datos numéricos de precio o stock.', 'error')
+    except Exception as e:
+        flash(f'Error al agregar producto: {e}', 'error')
+        db.session.rollback()
+    
+    return redirect(url_for('admin.menu'))
+
+@admin_bp.route('/add_variant/<int:parent_id>', methods=['POST'])
+@login_required
+@admin_required
+def add_variant(parent_id):
+    parent_product = Product.query.get_or_404(parent_id)
+    
+    name = bleach.clean(request.form.get('variant_name', '').strip())
+    price_str = request.form.get('variant_price', '0')
+    consumption_str = request.form.get('variant_consumption', '1')
+
+    try:
+        price = float(price_str)
+        stock_consumption = int(consumption_str)
+
+        if not name or price <= 0 or stock_consumption <= 0:
+            flash('Datos de variante inválidos.', 'error')
+            return redirect(url_for('admin.menu'))
+
+        variant = Product(
+            name=name,
+            price=price,
+            category=parent_product.category,
+            stock=0, # Variants don't have their own stock
+            parent_id=parent_product.id,
+            stock_consumption=stock_consumption
+        )
+        db.session.add(variant)
+        db.session.commit()
+        flash('Variante agregada exitosamente.', 'success')
+
+    except ValueError:
+        flash('Error en los datos numéricos de la variante.', 'error')
+    except Exception as e:
+        flash(f'Error al agregar variante: {e}', 'error')
+        db.session.rollback()
+
+    return redirect(url_for('admin.menu'))
+
+@admin_bp.route('/edit_product/<int:product_id>', methods=['POST'])
+@login_required
+@admin_required
+def edit_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    
+    try:
+        name = bleach.clean(request.form.get('name', '').strip())
+        if not name:
+            flash('El nombre es un campo requerido.', 'error')
+            return redirect(url_for('admin.menu'))
+
+        product.name = name
+
+        # Logic for Variants
+        if not product.is_base_product:
+            price_str = request.form.get('price', '0')
+            consumption_str = request.form.get('stock_consumption', '1')
+            product.price = float(price_str)
+            product.stock_consumption = int(consumption_str)
+            if product.price <= 0 or product.stock_consumption <= 0:
+                flash('Para variantes, el precio y el consumo deben ser mayores a cero.', 'error')
+                db.session.rollback()
+                return redirect(url_for('admin.menu'))
+
+        # Logic for Base and Simple Products
+        else:
+            stock_str = request.form.get('stock', '0')
+            product.stock = int(stock_str)
+            
+            # Only update price for simple products (not Principal category)
+            if product.category != 'Principal':
+                price_str = request.form.get('price', '0')
+                product.price = float(price_str)
+                if product.price <= 0:
+                    flash('El precio para este tipo de producto debe ser mayor a cero.', 'error')
+                    db.session.rollback()
+                    return redirect(url_for('admin.menu'))
+
+        db.session.commit()
+
+        # Emit stock update to all clients if base/simple product stock changes
+        if product.is_base_product:
+            socketio.emit('stock_update', {'product_id': product.id, 'stock': product.stock})
+            # Also update variants if they exist, to refresh their display
+            for variant in product.variants:
+                 socketio.emit('stock_update', {'product_id': variant.id, 'stock': product.stock})
+
+
+        flash('Producto actualizado exitosamente.', 'success')
+
+    except ValueError:
+        flash('Error en los datos numéricos (precio, stock o consumo).', 'error')
+        db.session.rollback()
+    except Exception as e:
+        flash(f'Error al actualizar producto: {e}', 'error')
+        db.session.rollback()
+    
+    return redirect(url_for('admin.menu'))
+
+@admin_bp.route('/delete_product/<int:product_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    product.is_active = False
+    db.session.commit()
+    flash('Producto eliminado exitosamente.', 'success')
+    return redirect(url_for('admin.menu'))
+
+@admin_bp.route('/users')
+@login_required
+@admin_required
+def users():
+    users = User.query.filter_by(is_active=True).all()
+    return render_template('admin/users.html', users=users)
+
+@admin_bp.route('/add_user', methods=['POST'])
+@login_required
+@admin_required
+def add_user():
+    username = bleach.clean(request.form.get('username', '').strip())
+    password = request.form.get('password', '')
+    role = bleach.clean(request.form.get('role', '').strip())
+    full_name = bleach.clean(request.form.get('full_name', '').strip())
+    
+    if not username or not password or role not in ['waiter', 'cook'] or not full_name:
+        flash('Todos los campos son requeridos y el rol debe ser válido.', 'error')
+        return redirect(url_for('admin.users'))
+    
+    if User.query.filter_by(username=username).first():
+        flash('El nombre de usuario ya existe.', 'error')
+        return redirect(url_for('admin.users'))
+    
+    try:
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role=role,
+            full_name=full_name
+        )
+        db.session.add(user)
+        db.session.commit()
+        flash('Usuario creado exitosamente.', 'success')
+    except Exception as e:
+        flash('Error al crear usuario.', 'error')
+        db.session.rollback()
+    
+    return redirect(url_for('admin.users'))
+
+
+@admin_bp.route('/reports')
+@login_required
+@admin_required
+def reports():
+    period = request.args.get('period', 'monthly') # Default to monthly
+    today = date.today()
+
+    if period == 'weekly':
+        start_date = today - timedelta(days=today.weekday())
+        end_date = start_date + timedelta(days=6)
+        period_label = f"Semana del {start_date.strftime('%d/%m')} al {end_date.strftime('%d/%m')}"
+    else: # monthly
+        start_date = today.replace(day=1)
+        next_month = start_date.replace(day=28) + timedelta(days=4) # Go to next month
+        end_date = next_month - timedelta(days=next_month.day) # Last day of current month
+        period_label = f"Mes de {start_date.strftime('%B de %Y')}"
+
+    # 1. Producto más vendido
+    top_product_query = (db.session.query(
+        Product.name,
+        db.func.sum(OrderItem.quantity).label('total_quantity')
+    )
+    .join(OrderItem, OrderItem.product_id == Product.id)
+    .join(Order, Order.id == OrderItem.order_id)
+    .filter(
+        Order.status == 'paid',
+        db.func.date(Order.created_at).between(start_date, end_date)
+    )
+    .group_by(Product.name)
+    .order_by(db.desc('total_quantity'))
+    .first())
+
+    # 2. Día con más ventas
+    top_day_query = db.session.query(
+        db.func.date(Order.created_at).label('sale_day'),
+        db.func.sum(Order.total).label('total_sales')
+    ).filter(
+        Order.status == 'paid',
+        db.func.date(Order.created_at).between(start_date, end_date)
+    ).group_by('sale_day').order_by(db.desc('total_sales')).first()
+
+    report_data = {
+        "periodo": period_label,
+        "producto_mas_vendido": f"{top_product_query[0]} (Cantidad: {top_product_query[1]})" if top_product_query else "N/A",
+        "dia_mas_ventas": f"{datetime.strptime(top_day_query[0], '%Y-%m-%d').strftime('%A, %d de %B')} (Total: Q{top_day_query[1]:.2f})" if top_day_query else "N/A"
+    }
+
+    if 'download' in request.args:
+        pdf_buffer = generate_sales_report_pdf(report_data, period)
+        return pdf_buffer, 200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': f'inline; filename=reporte_{period}_{today.strftime("%Y-%m-%d")}.pdf'
+        }
+
+    return render_template('admin/reports.html', report_data=report_data, period=period)
+
+
+@admin_bp.route('/daily_close', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def daily_close():
+    today = date.today()
+    
+    if request.method == 'POST':
+        cash_in_register = request.form.get('cash_in_register', 0)
+        
+        try:
+            cash_in_register = float(cash_in_register)
+            
+            # Calculate total sales for today
+            total_sales = db.session.query(db.func.sum(Order.total)).filter(
+                db.func.date(Order.created_at) == today,
+                Order.status == 'paid'
+            ).scalar() or 0
+            
+            difference = cash_in_register - total_sales
+            
+            # Save or update daily report
+            daily_report = DailyReport.query.filter_by(date=today).first()
+            if daily_report:
+                daily_report.total_sales = total_sales
+                daily_report.cash_in_register = cash_in_register
+                daily_report.difference = difference
+            else:
+                daily_report = DailyReport(
+                    date=today,
+                    total_sales=total_sales,
+                    cash_in_register=cash_in_register,
+                    difference=difference
+                )
+                db.session.add(daily_report)
+            
+            db.session.commit()
+            flash('Cierre diario registrado exitosamente.', 'success')
+            
+        except ValueError:
+            flash('Monto inválido.', 'error')
+        except Exception as e:
+            flash('Error al registrar cierre.', 'error')
+            db.session.rollback()
+
+    # Get today's sales data
+    total_sales = db.session.query(db.func.sum(Order.total)).filter(
+        db.func.date(Order.created_at) == today,
+        Order.status == 'paid'
+    ).scalar() or 0
+    
+    daily_report = DailyReport.query.filter_by(date=today).first()
+
+    if 'download' in request.args and request.args.get('download') == 'pdf':
+        if not daily_report:
+            flash('No hay un cierre diario registrado para hoy. Registre el cierre primero.', 'error')
+            return redirect(url_for('admin.daily_close'))
+
+        # Fetch orders for the report
+        orders_query = db.session.query(
+            Product.name.label('product_name'),
+            OrderItem.quantity.label('quantity'),
+            OrderItem.unit_price.label('unit_price'),
+            (OrderItem.quantity * OrderItem.unit_price).label('total')
+        ).join(OrderItem, OrderItem.product_id == Product.id)\
+         .join(Order, Order.id == OrderItem.order_id)\
+         .filter(
+            db.func.date(Order.created_at) == today,
+            Order.status == 'paid'
+         ).all()
+
+        orders_data = [row._asdict() for row in orders_query]
+
+        pdf_buffer = generate_daily_report_pdf(daily_report, orders_data)
+        
+        return pdf_buffer, 200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': f'inline; filename=reporte_diario_{today.strftime("%Y-%m-%d")}.pdf'
+        }
+
+    today_date = today.strftime('%d/%m/%Y')
+    return render_template('admin/daily_close.html', 
+                         total_sales=total_sales,
+                         daily_report=daily_report,
+                         today_date=today_date)

@@ -1,0 +1,70 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Procesar Pago{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="mb-0">Procesar Pago para la Orden #{{ order.id }}</h2>
+                <a href="{{ url_for('waiter.view_order', order_id=order.id) }}" class="btn btn-secondary">Volver a la Orden</a>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h4>Resumen de la Orden</h4>
+                </div>
+                <div class="card-body">
+                    <p><strong>Cliente:</strong> {{ order.customer_name or 'No especificado' }}</p>
+                    <p><strong>Mesero:</strong> {{ order.waiter.full_name }}</p>
+                    <p><strong>Fecha:</strong> {{ order.created_at|datetime_local }}</p>
+                    
+                    <hr>
+
+                    <h5>Items</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for item in order.items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ item.product.name }}</strong> (x{{ item.quantity }})
+                                {% if item.extras or item.notes %}
+                                <small class="d-block text-muted">
+                                    {% if item.extras %}<em>Extras: {{ item.extras | parse_extras }}</em><br>{% endif %}
+                                    {% if item.notes %}<em>Notas: {{ item.notes }}</em>{% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+                            <span>Q{{ "%.2f"|format(item.unit_price * item.quantity) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="card-footer">
+                    <h4 class="text-end">Total a Pagar: Q{{ "%.2f"|format(order.total) }}</h4>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h4>Registrar Pago</h4>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('waiter.process_payment', order_id=order.id) }}" method="POST">
+                        <div class="mb-3">
+                            <label for="cash_received" class="form-label">Efectivo Recibido</label>
+                            <div class="input-group">
+                                <span class="input-group-text">Q</span>
+                                <input type="number" class="form-control" id="cash_received" name="cash_received" step="0.01" min="{{ order.total }}" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-check-circle"></i> Confirmar Pago
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
