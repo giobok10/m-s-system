@@ -43,6 +43,39 @@
                 </form>
             </div>
         </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Detalle de Ventas</h5>
+            </div>
+            <div class="card-body">
+                {% if orders_data %}
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unit.</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in orders_data %}
+                        <tr>
+                            <td>{{ item.product_name }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>Q{{ "%.2f"|format(item.unit_price) }}</td>
+                            <td>Q{{ "%.2f"|format(item.total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p>No hay ventas registradas para hoy.</p>
+                {% endif %}
+            </div>
+        </div>
+
     </div>
     
     <div class="col-md-4">

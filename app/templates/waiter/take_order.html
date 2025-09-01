@@ -64,6 +64,10 @@
                         <label for="customer_name" class="form-label">Nombre del Cliente</label>
                         <input type="text" class="form-control" id="customer_name" name="customer_name">
                     </div>
+                    <div class="mb-3">
+                        <label for="customer_phone" class="form-label">Teléfono del Cliente (Opcional)</label>
+                        <input type="text" class="form-control" id="customer_phone" name="customer_phone" placeholder="Ingrese el teléfono">
+                    </div>
                     <div id="orderItems">
                         <p class="text-muted text-center">No hay productos seleccionados</p>
                     </div>
@@ -265,9 +269,31 @@ function addToOrder() {
         extraNames.push(cb.dataset.extraName);
     });
 
+    // Re-calculate available stock for the current product/variant before adding
+    let stockToCheck, consumptionRate, baseProductId;
+    if (currentProduct.is_base_product) { // This is a simple product
+        stockToCheck = currentProduct.stock;
+        consumptionRate = 1;
+        baseProductId = null;
+    } else { // This is a variant
+        stockToCheck = parseInt(baseProduct.productStock); // Stock of the base product
+        consumptionRate = currentProduct.stock_consumption;
+        baseProductId = baseProduct.productId;
+    }
+
+    const quantityInCart = getQuantityInCart(currentProduct.id, baseProductId);
+    const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
+
+    if (quantity > availableStockUnits) {
+        alert(`No hay suficiente stock disponible para agregar ${quantity} unidades de ${currentProduct.name}. Solo quedan ${availableStockUnits}.`);
+        return; // Prevent adding more than available stock
+    }
+
     const item = {
         product_id: currentProduct.id,
-        name: currentProduct.name,
+        // Determine the display name based on whether it's a variant
+        display_name: currentProduct.is_base_product ? currentProduct.name : `${baseProduct.productName} (${currentProduct.name})`,
+        name: currentProduct.name, // Keep original name for backend submission if needed
         price: itemPrice,
         quantity: quantity,
         extras: selectedExtras,
@@ -282,6 +308,9 @@ function addToOrder() {
     orderItems.push(item);
     updateOrderDisplay();
     quantityModal.hide();
+
+    // Reset baseProduct after adding item to avoid associating next item with it
+    baseProduct = null;
 }
 
 function getQuantityInCart(productId, baseProductId = null) {
@@ -330,7 +359,7 @@ function updateOrderDisplay() {
             html += `
                 <div class="d-flex justify-content-between align-items-start mb-2 p-2 border rounded">
                     <div>
-                        <strong>${item.name}</strong><br>
+                        <strong>${item.display_name}</strong><br>
                         <small class="text-muted">Cant: ${item.quantity} | Q${item.price.toFixed(2)} c/u</small>
                         ${item.displayExtras ? `<br><small class="text-muted">Extras: ${item.displayExtras}</small>` : ''}
                         ${item.notes ? `<br><small class="text-info">Notas: ${item.notes}</small>` : ''}

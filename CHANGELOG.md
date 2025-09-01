@@ -1,3 +1,14 @@
+### 2025-09-01
+
+*   **Corrección en Reportes de Ventas (Administrador)**:
+    *   **Solucionado:** Se corrigió la lógica para calcular el "Producto más vendido" en los reportes semanales y mensuales. Ahora el sistema agrupa correctamente las variantes de un producto (ej. "Tacos de res (Unidad)" y "Tacos de res (porción de 3)") bajo el producto base.
+    *   **Mejora:** El cálculo ahora se basa en el consumo de stock (`stock_consumption`) en lugar de la cantidad de items vendidos, reflejando con mayor precisión el uso del inventario y mostrando el producto más popular real.
+*   **Corrección de Errores en Toma de Pedidos (Mesero)**:
+    *   **Solucionado:** Se corrigió un error visual en la página "Tomar Pedido" donde el stock de los productos se mostraba incorrectamente al añadir diferentes tipos de productos a una misma orden. El error se debía a una variable global que no se reiniciaba.
+    *   **Solucionado:** Se corrigió un `Internal Server Error` en la página de "Tomar Pedido" causado por un error de sintaxis en la plantilla de Jinja2.
+*   **Mejora en Toma de Pedidos (Mesero)**:
+    *   **Añadido:** Se agregó el campo para ingresar el "Teléfono del Cliente (Opcional)" en el formulario de "Tomar Pedido", completando la funcionalidad descrita en la guía de usuario.
+
 ### 2025-08-31 (Sesión de Tarde)
 
 *   **Corrección de Errores Críticos en Módulos de Cocinero y Mesero**:
@@ -10,6 +21,13 @@
 *   **Mejora de Claridad (Cocinero):** El nombre de los productos con variantes ahora se muestra de forma completa en el dashboard del cocinero (ej. "Tacos de Res (Unidad)") para evitar ambigüedades.
 *   **Mejora Visual (Cocinero):** Corregido un error visual donde el botón "Marcar como Listo" permanecía con apariencia de deshabilitado después de que una orden cambiara de estado en tiempo real.
 *   **Mejora de Claridad (Mesero):** Se ha mejorado la presentación de las órdenes en la vista de "Detalles de la Orden" y en el comprobante PDF. Ahora los nombres de los productos con variantes se muestran de forma completa (ej. "Tacos de Res (Unidad)") para mayor claridad.
+
+### 2025-08-31 (Implementación de lee.md)
+
+*   **Visualización Consistente de Nombres de Productos**:
+    *   **Reportes de Administrador:** Implementada la visualización completa de nombres de productos (incluyendo variantes como "Producto Base (Variante)") en los reportes de ventas mensuales y semanales, tanto en la interfaz web como en los PDFs generados.
+    *   **Cierre Diario:** Implementada la visualización completa de nombres de productos en el detalle de ventas del cierre diario, tanto en la interfaz web como en los PDFs generados.
+    *   **Procesamiento de Pago (Mesero):** Implementada la visualización completa de nombres de productos en los ítems de la orden en la pantalla de procesamiento de pago.
 
 ### 2025-08-31
 

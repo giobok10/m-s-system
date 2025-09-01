@@ -195,6 +195,14 @@ Para manejar la presentación de datos de forma consistente en el frontend, se h
 - **`datetime_local`**: Convierte fechas y horas almacenadas en UTC a la zona horaria local de Guatemala (America/Guatemala, UTC-6), asegurando que toda la interfaz muestre una hora consistente.
 - **`parse_extras`**: Parsea el campo `OrderItem.extras` (que es un string JSON) para extraer y mostrar de forma legible los nombres de los extras seleccionados (ej: "Queso Extra, Salchicha Adicional").
 
+### Visualización Consistente de Nombres de Productos
+Se ha implementado una lógica mejorada para la visualización de nombres de productos en varias secciones de la aplicación, asegurando claridad y consistencia, especialmente para productos con variantes. Cuando un producto es una variante de otro (es decir, tiene un `parent_id` asociado), su nombre se muestra en el formato "Nombre del Producto Base (Nombre de la Variante)". Si el producto no es una variante, se muestra solo su nombre.
+
+Esta mejora aplica a:
+- **Reportes de Ventas (Administrador):** En la sección de "Producto más vendido" (web y PDF).
+- **Cierre Diario (Administrador):** En el detalle de ventas (web y PDF).
+- **Procesamiento de Pago (Mesero):** En la lista de ítems de la orden.
+
 ### Dockerfile
 ```dockerfile
 FROM python:3.11-slim

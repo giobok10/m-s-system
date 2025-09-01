@@ -27,7 +27,13 @@
                         {% for item in order.items %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
-                                <strong>{{ item.product.name }}</strong> (x{{ item.quantity }})
+                                <strong>
+                                    {% if item.product.parent %}
+                                        {{ item.product.parent.name }} ({{ item.product.name }})
+                                    {% else %}
+                                        {{ item.product.name }}
+                                    {% endif %}
+                                </strong> (x{{ item.quantity }})
                                 {% if item.extras or item.notes %}
                                 <small class="d-block text-muted">
                                     {% if item.extras %}<em>Extras: {{ item.extras | parse_extras }}</em><br>{% endif %}

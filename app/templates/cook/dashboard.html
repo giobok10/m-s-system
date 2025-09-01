@@ -35,7 +35,11 @@
                             {% if item.product.is_base_product %}
                                 {{ item.product.name }}
                             {% else %}
-                                {{ item.product.parent.name }} ({{ item.product.name }})
+                                {% if item.product.parent %}
+                                    {{ item.product.parent.name }} ({{ item.product.name }})
+                                {% else %}
+                                    {{ item.product.name }}
+                                {% endif %}
                             {% endif %}
                         </strong>
                     </div>
