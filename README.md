@@ -2,7 +2,7 @@
 
 Un sistema web integral para la gestión de órdenes, inventario y ventas en un restaurante. La aplicación está diseñada para optimizar el flujo de trabajo entre meseros, cocineros y administradores, con actualizaciones en tiempo real para una comunicación fluida.
 
-![Login](https://i.imgur.com/example.png) <!-- Reemplazar con una captura de pantalla real -->
+![Login](https://i.imgur.com/xBH9dgy.png)
 
 ## ✨ Características Principales
 
