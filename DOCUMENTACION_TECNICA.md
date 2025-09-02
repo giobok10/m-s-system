@@ -203,7 +203,92 @@ Esta mejora aplica a:
 - **Cierre Diario (Administrador):** En el detalle de ventas (web y PDF).
 - **Procesamiento de Pago (Mesero):** En la lista de ítems de la orden.
 
-### Dockerfile
+## Guía de Despliegue y Seguridad en Producción
+
+Esta sección contiene las mejores prácticas para configurar y desplegar la aplicación en un entorno de producción.
+
+### 1. Uso de Variables de Entorno
+
+Para máxima seguridad, **ninguna credencial o secreto debe estar escrito directamente en el código**. La aplicación está configurada para leer estos valores de variables de entorno. Es **mandatorio** configurar estas variables en tu entorno de despliegue.
+
+**Variables críticas:**
+
+- `SECRET_KEY`: Una cadena de texto larga, aleatoria y secreta. Es usada por Flask para firmar las cookies de sesión. Una clave débil o expuesta permite a un atacante tomar control de las sesiones de los usuarios.
+- `DEFAULT_ADMIN_PASSWORD`: Define la contraseña inicial para el usuario `admin` si la base de datos se crea desde cero. Debe ser una contraseña fuerte.
+- `DATABASE_URL`: (Opcional si se usa SQLite) Si se usa una base de datos externa como PostgreSQL, esta variable debe contener la URL de conexión completa (ej: `postgresql://user:password@host:port/dbname`).
+
+**Ejemplo de configuración en `docker-compose.yml`:**
+
+```yaml
+services:
+  restaurant-app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./instance:/app/instance
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=aqui-va-tu-clave-larga-y-aleatoria-generada
+```
+
+### 2. Desactivar el Modo de Depuración (Debug)
+
+El modo de depuración de Flask **nunca** debe estar activo en producción. Expone información sensible del sistema y permite la ejecución de código arbitrario. Al configurar `FLASK_ENV=production` como en el ejemplo anterior, el modo de depuración se desactiva automáticamente.
+
+### 3. Cambio de Contraseña del Administrador
+
+La contraseña del administrador se puede cambiar de forma segura sin necesidad de tener una interfaz para ello en la aplicación (lo cual sería un riesgo de seguridad).
+
+**Procedimiento:**
+
+1.  **Crear el script**: Crea un archivo temporal en la raíz del proyecto llamado `set_admin_password.py` con el siguiente contenido:
+    ```python
+    import sys
+    from werkzeug.security import generate_password_hash
+    from app import create_app, db
+    from app.models import User
+
+    if len(sys.argv) < 2:
+        print("Uso: python set_admin_password.py <nueva_contraseña>")
+        sys.exit(1)
+
+    new_password = sys.argv[1]
+    app = create_app()
+
+    with app.app_context():
+        admin = User.query.filter_by(username='admin').first()
+        if admin:
+            admin.password_hash = generate_password_hash(new_password)
+            db.session.commit()
+            print(f"La contraseña para el usuario 'admin' ha sido actualizada.")
+        else:
+            print("Usuario 'admin' no encontrado.")
+    ```
+2.  **Ejecutar el script**: Con los servicios corriendo (`docker-compose up -d`), ejecuta el siguiente comando desde tu terminal, reemplazando `<tu_nueva_contraseña>`:
+    ```bash
+    docker-compose exec restaurant-app python set_admin_password.py <tu_nueva_contraseña>
+    ```
+3.  **Eliminar el script**: Una vez confirmado el cambio, **elimina el archivo `set_admin_password.py` inmediatamente** para no dejarlo en el código fuente.
+    ```bash
+    del set_admin_password.py
+    ```
+
+### 4. Backups de la Base de Datos
+
+Es crucial realizar copias de seguridad periódicas de la base de datos. Dado que se usa SQLite, el backup consiste en copiar el archivo de la base de datos.
+
+```bash
+# Crear una copia de seguridad con fecha
+cp instance/restaurant.db backups/restaurant_$(date +%Y%m%d).db
+
+# Para restaurar (detener el contenedor primero)
+cp backups/restaurant_YYYYMMDD.db instance/restaurant.db
+```
+
+Se recomienda automatizar este proceso usando `cron` (en Linux) o el Programador de Tareas (en Windows).
+
+## Dockerfile
 ```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
@@ -215,7 +300,7 @@ EXPOSE 5000
 CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "run:app"]
 ```
 
-### Docker Compose
+## Docker Compose
 ```yaml
 services:
   restaurant-app:

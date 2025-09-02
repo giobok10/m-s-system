@@ -1,3 +1,9 @@
+### 2025-09-02
+
+*   **Gestión de Seguridad**:
+    *   **Añadido:** Se creó un script temporal (`set_admin_password.py`) para permitir el cambio de la contraseña del administrador de forma segura a través de la línea de comandos. El script se eliminó después de su uso.
+    *   **Mejora:** Se actualizó la contraseña del administrador a un valor seguro.
+
 ### 2025-09-01
 
 *   **Corrección en Reportes de Ventas (Administrador)**:

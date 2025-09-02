@@ -7,8 +7,6 @@ services:
       - ./instance:/app/instance
     environment:
       - FLASK_ENV=production
-      - SECRET_KEY=your-secret-key-change-this-in-production
+      - SECRET_KEY=${SECRET_KEY}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
     restart: unless-stopped
-
-volumes:
-  db_data:
