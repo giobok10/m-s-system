@@ -17,10 +17,10 @@ Este sistema está diseñado para gestionar las operaciones diarias de un restau
 4. Abrir navegador en: `http://localhost:5000`
 
 ### Primer Acceso
-- **Usuario**: admin
-- **Contraseña**: admin123
+- **Usuario**: `admin`
+- **Contraseña**: La que hayas configurado en la variable `DEFAULT_ADMIN_PASSWORD` durante la instalación.
 
-⚠️ **IMPORTANTE**: Cambiar la contraseña del administrador después del primer acceso.
+⚠️ **IMPORTANTE**: Si usaste una contraseña débil para la configuración inicial, se recomienda cambiarla.
 
 ## Rol: Administrador
 
