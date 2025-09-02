@@ -1,3 +1,11 @@
+### 2025-09-02 (Sesión de Tarde)
+
+*   **Cambio de Estrategia de Base de Datos para Producción**:
+    *   **Mejora:** Se migró la estrategia de base de datos para producción de SQLite a una base de datos PostgreSQL externa y persistente.
+    *   **Causa:** Se identificó que los sistemas de archivos de las plataformas de hosting gratuitas (como Render) son efímeros, lo que causaba la pérdida total de los datos de la base de datos SQLite en cada reinicio o despliegue.
+    *   **Solución:** Se añadió el driver `psycopg2-binary` a los requerimientos y se actualizó la configuración para leer la URL de la base de datos desde la variable de entorno `DATABASE_URL`.
+    *   **Documentación:** Se actualizaron los archivos `README.md` y `DOCUMENTACION_TECNICA.md` para reflejar que el uso de una base de datos PostgreSQL externa es obligatorio para producción.
+
 ### 2025-09-02
 
 *   **Gestión de Seguridad**:

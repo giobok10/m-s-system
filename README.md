@@ -77,11 +77,12 @@ Sigue estos pasos para levantar el proyecto en tu máquina local.
 4.  **¡Listo!**
     La aplicación estará disponible en tu navegador en la dirección [http://localhost:5000](http://localhost:5000).
 
-## 👤 Uso y Credenciales
+## 🚀 Despliegue en Producción
 
-La primera vez que la aplicación se ejecuta, crea un usuario administrador por defecto.
+Para desplegar esta aplicación en un servicio de hosting como **Render**, es crucial tener en cuenta lo siguiente:
 
--   **Usuario:** `admin`
--   **Contraseña:** La que hayas configurado en la variable `DEFAULT_ADMIN_PASSWORD` de tu archivo `.env`.
+-   **Base de Datos:** Los servicios de hosting gratuitos suelen tener sistemas de archivos efímeros, lo que significa que la base de datos SQLite se borrará con cada reinicio. Por lo tanto, es **obligatorio** usar una base de datos externa y persistente.
+-   **Configuración:** La aplicación está lista para usar PostgreSQL. Simplemente crea una base de datos gratuita en un servicio como [Supabase](https://supabase.com/) o [Neon](https://neon.tech/) y configura la siguiente variable de entorno en tu plataforma de hosting:
+    -   `DATABASE_URL`: La URL de conexión a tu base de datos PostgreSQL.
 
-Desde el panel de administrador podrás crear los usuarios para los meseros y cocineros.
+Al detectar esta variable, la aplicación se conectará automáticamente a PostgreSQL en lugar de usar SQLite.

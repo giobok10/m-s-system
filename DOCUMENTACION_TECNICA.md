@@ -205,88 +205,61 @@ Esta mejora aplica a:
 
 ## Guía de Despliegue y Seguridad en Producción
 
-Esta sección contiene las mejores prácticas para configurar y desplegar la aplicación en un entorno de producción.
+Esta sección contiene las mejores prácticas para configurar y desplegar la aplicación en un entorno de producción, especialmente en plataformas como Render.
 
-### 1. Uso de Variables de Entorno
+### Diferencia Clave: Desarrollo Local vs. Producción
 
-Para máxima seguridad, **ninguna credencial o secreto debe estar escrito directamente en el código**. La aplicación está configurada para leer estos valores de variables de entorno. Es **mandatorio** configurar estas variables en tu entorno de despliegue.
+- **Desarrollo Local (usando `docker-compose`):** El sistema utiliza **SQLite** por defecto. La base de datos se guarda en un archivo local (`instance/restaurant.db`) que persiste en tu máquina gracias a los volúmenes de Docker. Esto es ideal para desarrollar y probar rápidamente.
+- **Producción (ej. Render):** Plataformas en la nube (especialmente en planes gratuitos) usan **sistemas de archivos efímeros**, lo que significa que cualquier archivo guardado localmente (como una base de datos SQLite) **se borrará permanentemente** con cada reinicio o despliegue.
 
-**Variables críticas:**
+Por esta razón, para producción es **OBLIGATORIO** usar un servicio de base de datos externo y persistente.
 
-- `SECRET_KEY`: Una cadena de texto larga, aleatoria y secreta. Es usada por Flask para firmar las cookies de sesión. Una clave débil o expuesta permite a un atacante tomar control de las sesiones de los usuarios.
-- `DEFAULT_ADMIN_PASSWORD`: Define la contraseña inicial para el usuario `admin` si la base de datos se crea desde cero. Debe ser una contraseña fuerte.
-- `DATABASE_URL`: (Opcional si se usa SQLite) Si se usa una base de datos externa como PostgreSQL, esta variable debe contener la URL de conexión completa (ej: `postgresql://user:password@host:port/dbname`).
+### 1. Configurar una Base de Datos PostgreSQL Externa
 
-**Ejemplo de configuración en `docker-compose.yml`:**
+La aplicación está preparada para conectarse a una base de datos PostgreSQL, que es la solución recomendada y probada para producción.
 
-```yaml
-services:
-  restaurant-app:
-    build: .
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./instance:/app/instance
-    environment:
-      - FLASK_ENV=production
-      - SECRET_KEY=aqui-va-tu-clave-larga-y-aleatoria-generada
-```
+1.  **Crear una cuenta en un proveedor de bases de datos:** Elige un proveedor que ofrezca un plan gratuito, como **Supabase** o **Neon**.
+2.  **Crear una nueva base de datos PostgreSQL:** Sigue las instrucciones del proveedor para crearla.
+3.  **Obtener la URL de Conexión (Connection String):** El proveedor te dará una URL que contiene todas las credenciales. Para una mejor compatibilidad con Render, busca la URL que utilice el **"Connection Pooler" (PgBouncer)**.
 
-### 2. Desactivar el Modo de Depuración (Debug)
+### 2. Uso de Variables de Entorno (Mandatorio en Producción)
 
-El modo de depuración de Flask **nunca** debe estar activo en producción. Expone información sensible del sistema y permite la ejecución de código arbitrario. Al configurar `FLASK_ENV=production` como en el ejemplo anterior, el modo de depuración se desactiva automáticamente.
+Para máxima seguridad, **ninguna credencial o secreto debe estar escrito directamente en el código**. La aplicación está configurada para leer estos valores de variables de entorno.
 
-### 3. Cambio de Contraseña del Administrador
+**Variables críticas para producción:**
 
-La contraseña del administrador se puede cambiar de forma segura sin necesidad de tener una interfaz para ello en la aplicación (lo cual sería un riesgo de seguridad).
+-   `SECRET_KEY`: Una cadena de texto larga, aleatoria y secreta. Es usada por Flask para firmar las cookies de sesión.
+-   `DEFAULT_ADMIN_PASSWORD`: Define la contraseña inicial para el usuario `admin` la primera vez que la base de datos se cree. Debe ser una contraseña fuerte.
+-   `DATABASE_URL`: **(Obligatorio en Producción)** Aquí debes pegar la URL de conexión de tu base de datos PostgreSQL externa. La aplicación detectará esta variable y la usará en lugar de SQLite.
 
-**Procedimiento:**
+### 3. Desactivar el Modo de Depuración (Debug)
 
-1.  **Crear el script**: Crea un archivo temporal en la raíz del proyecto llamado `set_admin_password.py` con el siguiente contenido:
-    ```python
-    import sys
-    from werkzeug.security import generate_password_hash
-    from app import create_app, db
-    from app.models import User
+El modo de depuración de Flask **nunca** debe estar activo en producción. Al configurar la variable de entorno `FLASK_ENV=production` en tu servicio de Render, el modo de depuración se desactiva automáticamente.
 
-    if len(sys.argv) < 2:
-        print("Uso: python set_admin_password.py <nueva_contraseña>")
-        sys.exit(1)
+### 4. Cambio de Contraseña del Administrador
 
-    new_password = sys.argv[1]
-    app = create_app()
+El procedimiento para cambiar la contraseña del administrador sigue siendo el mismo, ejecutando un script dentro del contenedor de Docker.
 
-    with app.app_context():
-        admin = User.query.filter_by(username='admin').first()
-        if admin:
-            admin.password_hash = generate_password_hash(new_password)
-            db.session.commit()
-            print(f"La contraseña para el usuario 'admin' ha sido actualizada.")
-        else:
-            print("Usuario 'admin' no encontrado.")
-    ```
-2.  **Ejecutar el script**: Con los servicios corriendo (`docker-compose up -d`), ejecuta el siguiente comando desde tu terminal, reemplazando `<tu_nueva_contraseña>`:
+**Procedimiento en Producción (Render):**
+
+1.  **Crea el script `set_admin_password.py`** localmente (el código es el mismo que se describió anteriormente). **No lo subas a Git.**
+2.  **Abre la terminal de Render:** En el dashboard de tu servicio, ve a la pestaña **"Shell"**.
+3.  **Crea el archivo dentro del contenedor:**
+    *   Ejecuta `cat > set_admin_password.py`.
+    *   Pega el contenido del script en la terminal.
+    *   Presiona `Ctrl+D` para guardar.
+4.  **Ejecuta el script:**
     ```bash
-    docker-compose exec restaurant-app python set_admin_password.py <tu_nueva_contraseña>
+    python set_admin_password.py <tu_nueva_contraseña_segura>
     ```
-3.  **Eliminar el script**: Una vez confirmado el cambio, **elimina el archivo `set_admin_password.py` inmediatamente** para no dejarlo en el código fuente.
+5.  **Elimina el script inmediatamente:**
     ```bash
-    del set_admin_password.py
+    rm set_admin_password.py
     ```
 
-### 4. Backups de la Base de Datos
+### 5. Backups de la Base de Datos
 
-Es crucial realizar copias de seguridad periódicas de la base de datos. Dado que se usa SQLite, el backup consiste en copiar el archivo de la base de datos.
-
-```bash
-# Crear una copia de seguridad con fecha
-cp instance/restaurant.db backups/restaurant_$(date +%Y%m%d).db
-
-# Para restaurar (detener el contenedor primero)
-cp backups/restaurant_YYYYMMDD.db instance/restaurant.db
-```
-
-Se recomienda automatizar este proceso usando `cron` (en Linux) o el Programador de Tareas (en Windows).
+Al usar un servicio de base de datos externo como Supabase o Neon, ellos se encargan de la gestión de backups, lo cual es una gran ventaja. Consulta la documentación de tu proveedor para entender su política de backups y cómo realizar restauraciones si fuera necesario. El método de copiar el archivo `.db` ya no aplica.
 
 ## Dockerfile
 ```dockerfile
