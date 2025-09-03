@@ -305,10 +305,23 @@ def reports():
         db.func.date(Order.created_at).between(start_date, end_date)
     ).group_by('sale_day').order_by(db.desc('total_sales')).first()
 
+    dia_mas_ventas_str = "N/A"
+    if top_day_query:
+        sale_day = top_day_query[0]
+        # Handle both string (from SQLite) and date objects (from PostgreSQL)
+        if isinstance(sale_day, str):
+            sale_day_obj = datetime.strptime(sale_day, '%Y-%m-%d').date()
+        else:
+            sale_day_obj = sale_day
+        
+        # Locale settings might be needed for Spanish month/day names on all systems
+        # For now, relying on system's locale.
+        dia_mas_ventas_str = f"{sale_day_obj.strftime('%A, %d de %B')} (Total: Q{top_day_query[1]:.2f})"
+
     report_data = {
         "periodo": period_label,
         "producto_mas_vendido": product_display_name,
-        "dia_mas_ventas": f"{datetime.strptime(top_day_query[0], '%Y-%m-%d').strftime('%A, %d de %B')} (Total: Q{top_day_query[1]:.2f})" if top_day_query else "N/A"
+        "dia_mas_ventas": dia_mas_ventas_str
     }
 
     if 'download' in request.args:

@@ -80,7 +80,7 @@
 - product_id: Integer (FK)
 - quantity: Integer
 - unit_price: Float # Precio del producto principal + suma de precios de extras
-- extras: Text # Un string JSON que contiene una lista de objetos 'extra'. Cada objeto tiene 'id', 'name' y 'price'.
+- extras: Text # Un string JSON que contiene una lista de objetos 'extra'. Cada objeto tiene 'id', 'name', 'price' y 'quantity'.
 - notes: Text
 ```
 

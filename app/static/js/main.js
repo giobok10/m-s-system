@@ -149,7 +149,7 @@ function createNewOrderCard(data) {
         if (item.extras && item.extras !== '[]') {
             try {
                 const extrasList = JSON.parse(item.extras);
-                extrasText = extrasList.map(e => e.name).join(', ');
+                extrasText = extrasList.map(e => `${e.name} (x${e.quantity})`).join(', ');
             } catch(e) { extrasText = item.extras; } // Fallback for non-json
         }
 

@@ -1,3 +1,16 @@
+### 2025-09-03
+
+*   **Mejora en la Selección de Extras (Mesero)**:
+    *   **Cambio:** Se ha modificado la interfaz de "Tomar Pedido" para permitir la selección de cantidades para los productos "Extra".
+    *   **De:** Anteriormente, los extras solo podían ser seleccionados con un checkbox (una unidad por producto principal).
+    *   **A:** Ahora, cada extra tiene un campo numérico, permitiendo al mesero agregar múltiples unidades de un mismo extra a un solo producto (ej. "Torta con doble queso extra").
+    *   **Impacto:** Se actualizó la lógica del frontend (JavaScript) para calcular precios y validar stock basado en cantidades, y se ajustó el backend (`waiter_routes.py`) para procesar y almacenar correctamente esta nueva información, incluyendo la restauración de stock al cancelar una orden.
+
+*   **Corrección de Error en Reportes (Producción)**:
+    *   **Solucionado:** Se corrigió un `TypeError` que causaba un "Internal Server Error" en la página de reportes (`/admin/reports`) cuando la aplicación se ejecutaba en el servidor de producción (Render).
+    *   **Causa:** El error ocurría porque el código intentaba procesar un objeto de tipo `date` como si fuera un `string`. Este comportamiento variaba entre la base de datos local (SQLite) y la de producción (PostgreSQL).
+    *   **Solución:** Se eliminó la conversión innecesaria en `admin_routes.py`, asegurando que el formato de fecha se maneje correctamente en ambos entornos.
+
 ### 2025-09-02 (Sesión de Tarde)
 
 *   **Cambio de Estrategia de Base de Datos para Producción**:

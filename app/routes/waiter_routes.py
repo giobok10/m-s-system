@@ -81,7 +81,9 @@ def create_order():
             # Handle extras stock
             for extra_data in item_data.get('extras', []):
                 extra_id = int(extra_data['id'])
-                stock_requirements[extra_id] = stock_requirements.get(extra_id, 0) + quantity
+                extra_quantity = int(extra_data['quantity'])
+                # Stock for extras is consumed per main item quantity
+                stock_requirements[extra_id] = stock_requirements.get(extra_id, 0) + (extra_quantity * quantity)
 
         for product_id, required_stock in stock_requirements.items():
             product_to_check = Product.query.get(product_id)
@@ -104,7 +106,7 @@ def create_order():
             item_price = product.price
             for extra in extras_data:
                 extra_product = Product.query.get(extra['id'])
-                item_price += extra_product.price
+                item_price += extra_product.price * int(extra['quantity'])
 
             order_item = OrderItem(
                 order_id=order.id,
@@ -168,7 +170,7 @@ def send_to_kitchen(order_id):
         'items': [{
             'product_name': get_display_name(item.product),
             'quantity': item.quantity,
-            'extras': item.extras,
+            'extras': item.extras, # Extras are sent as a JSON string
             'notes': item.notes
         } for item in order.items]
     }, room='kitchen')
@@ -205,16 +207,16 @@ def cancel_order(order_id):
                 for extra_data in extras_list:
                     extra_product = Product.query.get(extra_data.get('id'))
                     if extra_product:
-                        extra_product.stock += item.quantity
+                        extra_quantity = int(extra_data.get('quantity', 1)) # Default to 1 for old orders
+                        extra_product.stock += extra_quantity * item.quantity
                         socketio.emit('stock_update', {'product_id': extra_product.id, 'stock': extra_product.stock})
             except (json.JSONDecodeError, TypeError):
                 pass # Ignore malformed old data
     
     order.status = 'cancelled'
     db.session.commit()
-    
-    flash('Orden cancelada exitosamente.', 'success')
-    return redirect(url_for('waiter.dashboard'))
+
+
 
 @waiter_bp.route('/process_payment/<int:order_id>', methods=['GET', 'POST'])
 @login_required

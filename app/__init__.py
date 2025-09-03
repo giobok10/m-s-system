@@ -20,7 +20,7 @@ def format_datetime_local(dt_utc, format="%d/%m/%Y %H:%M"):
     return dt_local.strftime(format)
 
 def parse_extras_filter(extras_json):
-    """Jinja filter to parse a JSON string of extras and return a readable string."""
+    """Jinja filter to parse a JSON string of extras and return a readable string with quantities."""
     if not extras_json:
         return ""
     try:
@@ -28,8 +28,12 @@ def parse_extras_filter(extras_json):
         if not isinstance(extras_list, list) or not extras_list:
             return ""
         
-        names = [extra.get('name') for extra in extras_list if isinstance(extra, dict) and extra.get('name')]
-        return ', '.join(names)
+        parts = []
+        for extra in extras_list:
+            if isinstance(extra, dict) and 'name' in extra and 'quantity' in extra:
+                parts.append(f"{extra['name']} (x{extra['quantity']})")
+        
+        return ', '.join(parts)
     except (json.JSONDecodeError, TypeError):
         return extras_json
 

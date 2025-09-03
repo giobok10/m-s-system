@@ -120,12 +120,18 @@
                     <label class="form-label">Extras</label>
                     <div id="extrasContainer">
                         {% for extra in extras %}
-                        <div class="form-check">
-                            <input class="form-check-input extra-checkbox" type="checkbox" value="{{ extra.id }}" id="extra-{{ extra.id }}" data-extra-name="{{ extra.name }}" data-extra-price="{{ extra.price }}" data-extra-stock="{{ extra.stock }}">
-                            <label class="form-check-label" for="extra-{{ extra.id }}">
+                        <div class="extra-item d-flex justify-content-between align-items-center mb-2">
+                            <label for="extra-{{ extra.id }}" class="form-label">
                                 {{ extra.name }} (+Q{{ "%.2f"|format(extra.price) }})
-                                <small class="text-muted ms-2" data-stock-id="{{ extra.id }}"></small>
+                                <small class="text-muted ms-2" data-stock-id="extra-{{ extra.id }}"></small>
                             </label>
+                            <input type="number" class="form-control extra-quantity-input"
+                                   id="extra-{{ extra.id }}"
+                                   data-extra-id="{{ extra.id }}"
+                                   data-extra-name="{{ extra.name }}"
+                                   data-extra-price="{{ extra.price }}"
+                                   data-extra-stock="{{ extra.stock }}"
+                                   value="0" min="0" style="width: 80px;">
                         </div>
                         {% endfor %}
                     </div>
@@ -231,22 +237,23 @@ function openQuantityModal(card, variant = null) {
     quantityInput.disabled = availableStockUnits <= 0;
     document.getElementById('addToOrderBtn').disabled = availableStockUnits <= 0;
 
-    document.querySelectorAll('#extrasContainer .form-check').forEach(formCheck => {
-        const checkbox = formCheck.querySelector('.extra-checkbox');
-        const extraId = checkbox.value;
-        const extraStock = parseInt(checkbox.dataset.extraStock);
+    // Handle Extras
+    document.querySelectorAll('.extra-quantity-input').forEach(input => {
+        const extraId = input.dataset.extraId;
+        const extraStock = parseInt(input.dataset.extraStock);
         const extraQuantityInCart = getExtraQuantityInCart(extraId);
         const availableExtraStock = extraStock - extraQuantityInCart;
         
-        const label = formCheck.querySelector('label small');
+        const stockLabel = document.querySelector(`[data-stock-id="extra-${extraId}"]`);
+        input.max = availableExtraStock;
+        input.value = 0;
+
         if (availableExtraStock <= 0) {
-            label.textContent = ' (Agotado)';
-            checkbox.disabled = true;
-            checkbox.checked = false;
+            stockLabel.textContent = ' (Agotado)';
+            input.disabled = true;
         } else {
-            label.textContent = ` (Stock: ${availableExtraStock})`;
-            checkbox.disabled = false;
-            checkbox.checked = false;
+            stockLabel.textContent = ` (Stock: ${availableExtraStock})`;
+            input.disabled = false;
         }
     });
 
@@ -263,20 +270,29 @@ function addToOrder() {
     const selectedExtras = [];
     const extraNames = [];
 
-    document.querySelectorAll('.extra-checkbox:checked').forEach(cb => {
-        itemPrice += parseFloat(cb.dataset.extraPrice);
-        selectedExtras.push({ id: cb.value, name: cb.dataset.extraName, price: parseFloat(cb.dataset.extraPrice) });
-        extraNames.push(cb.dataset.extraName);
+    document.querySelectorAll('.extra-quantity-input').forEach(input => {
+        const extraQuantity = parseInt(input.value);
+        if (extraQuantity > 0) {
+            const extraPrice = parseFloat(input.dataset.extraPrice);
+            itemPrice += extraPrice * extraQuantity;
+            selectedExtras.push({
+                id: input.dataset.extraId,
+                name: input.dataset.extraName,
+                price: extraPrice,
+                quantity: extraQuantity
+            });
+            extraNames.push(`${input.dataset.extraName} (x${extraQuantity})`);
+        }
     });
 
-    // Re-calculate available stock for the current product/variant before adding
+    // Re-calculate available stock for the main product/variant before adding
     let stockToCheck, consumptionRate, baseProductId;
-    if (currentProduct.is_base_product) { // This is a simple product
+    if (currentProduct.is_base_product) {
         stockToCheck = currentProduct.stock;
         consumptionRate = 1;
         baseProductId = null;
-    } else { // This is a variant
-        stockToCheck = parseInt(baseProduct.productStock); // Stock of the base product
+    } else {
+        stockToCheck = parseInt(baseProduct.productStock);
         consumptionRate = currentProduct.stock_consumption;
         baseProductId = baseProduct.productId;
     }
@@ -286,14 +302,13 @@ function addToOrder() {
 
     if (quantity > availableStockUnits) {
         alert(`No hay suficiente stock disponible para agregar ${quantity} unidades de ${currentProduct.name}. Solo quedan ${availableStockUnits}.`);
-        return; // Prevent adding more than available stock
+        return;
     }
 
     const item = {
         product_id: currentProduct.id,
-        // Determine the display name based on whether it's a variant
         display_name: currentProduct.is_base_product ? currentProduct.name : `${baseProduct.productName} (${currentProduct.name})`,
-        name: currentProduct.name, // Keep original name for backend submission if needed
+        name: currentProduct.name,
         price: itemPrice,
         quantity: quantity,
         extras: selectedExtras,
@@ -308,8 +323,6 @@ function addToOrder() {
     orderItems.push(item);
     updateOrderDisplay();
     quantityModal.hide();
-
-    // Reset baseProduct after adding item to avoid associating next item with it
     baseProduct = null;
 }
 
@@ -335,7 +348,8 @@ function getExtraQuantityInCart(extraId) {
         if (item.extras) {
             item.extras.forEach(extra => {
                 if (String(extra.id) === String(extraId)) {
-                    total += item.quantity;
+                    // Total extras needed = (quantity of this extra) * (quantity of main item)
+                    total += extra.quantity * item.quantity;
                 }
             });
         }

@@ -168,7 +168,7 @@ def generate_receipt_pdf(order, cash_received, change):
             try:
                 extras_list = json.loads(item.extras)
                 if extras_list:
-                    extra_names = [extra['name'] for extra in extras_list]
+                    extra_names = [f"{extra['name']} (x{extra['quantity']})" for extra in extras_list]
                     description += f"<br/><font size='-1'><i>Extras: {', '.join(extra_names)}</i></font>"
             except (json.JSONDecodeError, TypeError):
                 # Fallback for old data that is just a string
