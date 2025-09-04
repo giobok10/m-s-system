@@ -18,7 +18,7 @@ Este sistema está diseñado para gestionar las operaciones diarias de un restau
 
 ### Primer Acceso
 - **Usuario**: `admin`
-- **Contraseña**: La que hayas configurado en el código (`4dM1n-#123-SyM` por defecto) o en tus variables de entorno.
+- **Contraseña**: La que hayas configurado en tus variables de entorno para `DEFAULT_ADMIN_PASSWORD`.
 
 ⚠️ **IMPORTANTE**: Si usaste una contraseña débil para la configuración inicial, se recomienda cambiarla.
 
