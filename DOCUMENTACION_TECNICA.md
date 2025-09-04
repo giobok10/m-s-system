@@ -19,10 +19,6 @@
 │   ├── __init__.py              # Factory pattern y configuración
 │   ├── models.py                # Modelos de base de datos
 │   ├── routes/                  # Blueprints organizados por rol
-│   │   ├── auth_routes.py       # Autenticación
-│   │   ├── admin_routes.py      # Funciones de administrador
-│   │   ├── waiter_routes.py     # Funciones de mesero
-│   │   └── cook_routes.py       # Funciones de cocinero
 │   ├── sockets/                 # Eventos WebSocket
 │   ├── services/                # Lógica de negocio
 │   ├── static/                  # Archivos estáticos
@@ -51,12 +47,22 @@
 - id: Integer (PK)
 - name: String(100)
 - price: Float (Nulo para productos base)
-- category: String(50) ['Principal', 'Bebida', 'Extra']
+- category: String(50) ['Principal', 'Bebida', 'Extra', 'Combo']
 - stock: Integer (Stock para productos base o simples)
 - created_at: DateTime
 - is_active: Boolean
 - parent_id: Integer (FK a product.id, para variantes)
 - stock_consumption: Integer (Unidades de stock que consume una variante)
+# Relación a ComboItem para productos de categoría 'Combo'
+- components: relationship('ComboItem') 
+```
+
+### ComboItem (Componentes de Combo)
+```python
+- id: Integer (PK)
+- combo_product_id: Integer (FK a product.id)
+- component_product_id: Integer (FK a product.id)
+- quantity: Integer (Cantidad del componente en el combo)
 ```
 
 ### Order (Órdenes)
@@ -69,8 +75,8 @@
 - created_at: DateTime
 - updated_at: DateTime
 - waiter_id: Integer (FK)
-- cash_received: Float # Monto en efectivo recibido para el pago
-- change_given: Float # Cambio entregado al cliente
+- cash_received: Float
+- change_given: Float
 ```
 
 ### OrderItem (Items de Orden)
@@ -79,8 +85,8 @@
 - order_id: Integer (FK)
 - product_id: Integer (FK)
 - quantity: Integer
-- unit_price: Float # Precio del producto principal + suma de precios de extras
-- extras: Text # Un string JSON que contiene una lista de objetos 'extra'. Cada objeto tiene 'id', 'name', 'price' y 'quantity'.
+- unit_price: Float
+- extras: Text # String JSON con lista de extras
 - notes: Text
 ```
 
@@ -96,319 +102,43 @@
 
 ## Seguridad Implementada
 
-### Autenticación y Autorización
 - **Hash de contraseñas**: Werkzeug PBKDF2 SHA256
-- **Sesiones seguras**: Flask-Login con cookies firmadas
-- **Control de acceso**: Decoradores por rol (@admin_required, @waiter_required, @cook_required)
-- **Timeout de sesión**: Cierre automático por inactividad
-
-### Sanitización de Datos
-- **Bleach**: Limpieza de inputs HTML para prevenir XSS
-- **Validación de tipos**: Conversión segura de datos numéricos
-- **Escape de plantillas**: Jinja2 auto-escape habilitado
-- **Validación de formularios**: Verificación server-side
-
-### Prevención de Inyecciones
-- **SQLAlchemy ORM**: Previene inyección SQL automáticamente
-- **Parámetros preparados**: Todas las consultas usan parámetros seguros
-- **Validación de entrada**: Verificación de tipos y rangos
-
-### Headers de Seguridad
-- **Content Security Policy**: Prevención de XSS
-- **X-Frame-Options**: Protección contra clickjacking
-- **X-Content-Type-Options**: Prevención de MIME sniffing
+- **Control de acceso**: Decoradores por rol
+- **Sanitización de Datos**: Bleach para prevenir XSS
+- **Prevención de Inyecciones**: SQLAlchemy ORM
 
 ## API WebSocket
 
-### Eventos del Cliente al Servidor
-```javascript
-// Conexión automática por rol
-socket.on('connect')
-socket.on('disconnect')
-```
-
-### Eventos del Servidor al Cliente
-```javascript
-// Nueva orden para cocina
-'new_order': {
-    order_id: int,
-    customer_name: string,
-    items: array
-}
-
-// Actualización de estado de la orden
-'order_status_update': {
-    order_id: int,
-    status: string,
-    customer_name: string
-}
-
-// Actualización de stock de un producto
-'stock_update': {
-    product_id: int,
-    stock: int
-}
-
-// Notificaciones generales
-'notification': {
-    message: string,
-    type: string
-}
-```
-
-### Salas (Rooms)
-- **kitchen**: Cocineros reciben nuevas órdenes y actualizaciones de estado.
-- **waiters**: Meseros reciben actualizaciones de estado de las órdenes.
-- **admin**: Administradores reciben todas las notificaciones.
+- **`new_order`**: Notifica a la cocina de una nueva orden.
+- **`order_status_update`**: Notifica a meseros de cambios de estado.
+- **`stock_update`**: Notifica a todos de cambios en el stock.
 
 ## Flujo de Datos
 
 ### Proceso de Orden
 1. **Mesero crea orden** → Estado: 'pending' + WebSocket 'stock_update' para todos.
 2. **Mesero envía a cocina** → Estado: 'sent_to_kitchen' + WebSocket 'new_order' a cocina.
-3. **Cocinero inicia preparación** → Estado: 'in_preparation' + WebSocket 'order_status_update' a cocina y meseros.
-4. **Cocinero marca listo** → Estado: 'ready' + WebSocket 'order_status_update' a cocina y meseros.
+3. **Cocinero inicia preparación** → Estado: 'in_preparation' + WebSocket 'order_status_update'.
+4. **Cocinero marca listo** → Estado: 'ready' + WebSocket 'order_status_update'.
 5. **Mesero procesa pago** → Estado: 'paid'
 6. **Mesero cancela orden** → Estado: 'cancelled' + WebSocket 'stock_update' para todos.
 
 ### Gestión de Stock
 - **Reserva**: El stock se descuenta de la base de datos en el momento de la **creación de la orden** (`create_order`).
 - **Lógica de Descuento**:
-    - **Productos Simples (Bebidas, Extras)**: Se descuenta la cantidad pedida del `stock` del propio producto.
+    - **Productos Simples (Bebida, Extra)**: Se descuenta la cantidad pedida del `stock` del propio producto.
     - **Variantes de Productos (Principal)**: Se descuenta del `stock` del producto **padre** una cantidad igual a (`stock_consumption` de la variante * cantidad pedida).
-- **Liberación**: El stock se restaura si una orden es cancelada (`cancel_order`). La lógica es simétrica a la de la reserva, devolviendo el stock al producto simple o al producto padre correspondiente.
-- **Actualización**: El administrador puede ajustar el stock manualmente desde la gestión del menú. Para productos con variantes, solo se debe editar el stock del producto base.
+    - **Combos**: Se itera sobre los componentes definidos en la tabla `ComboItem`. Para cada componente, se descuenta el stock de su producto base correspondiente, multiplicado por la cantidad definida en el combo y la cantidad pedida del combo.
+- **Liberación**: El stock se restaura si una orden es cancelada (`cancel_order`). La lógica es simétrica a la de la reserva.
 
 ### Cierre de Caja Diario
-1.  Al final del día, el administrador va a la sección de "Cierre de Caja".
-2.  El sistema muestra el total de ventas del día.
-3.  El administrador ingresa el monto de efectivo contado en caja.
-4.  El sistema calcula la diferencia (sobrante o faltante).
-5.  El administrador guarda el cierre diario.
-6.  Se puede generar un reporte en PDF con el resumen del cierre y el detalle de las ventas del día.
-
-## Personalizaciones y Lógica de Plantillas
-
-### Filtros de Jinja Personalizados
-Para manejar la presentación de datos de forma consistente en el frontend, se han implementado filtros personalizados en `app/__init__.py`:
-
-- **`datetime_local`**: Convierte fechas y horas almacenadas en UTC a la zona horaria local de Guatemala (America/Guatemala, UTC-6), asegurando que toda la interfaz muestre una hora consistente.
-- **`parse_extras`**: Parsea el campo `OrderItem.extras` (que es un string JSON) para extraer y mostrar de forma legible los nombres de los extras seleccionados (ej: "Queso Extra, Salchicha Adicional").
-
-### Visualización Consistente de Nombres de Productos
-Se ha implementado una lógica mejorada para la visualización de nombres de productos en varias secciones de la aplicación, asegurando claridad y consistencia, especialmente para productos con variantes. Cuando un producto es una variante de otro (es decir, tiene un `parent_id` asociado), su nombre se muestra en el formato "Nombre del Producto Base (Nombre de la Variante)". Si el producto no es una variante, se muestra solo su nombre.
-
-Esta mejora aplica a:
-- **Reportes de Ventas (Administrador):** En la sección de "Producto más vendido" (web y PDF).
-- **Cierre Diario (Administrador):** En el detalle de ventas (web y PDF).
-- **Procesamiento de Pago (Mesero):** En la lista de ítems de la orden.
+- El administrador registra el efectivo en caja al final del día y el sistema calcula las ventas y la diferencia, generando un reporte en PDF si se solicita.
 
 ## Guía de Despliegue y Seguridad en Producción
 
-Esta sección contiene las mejores prácticas para configurar y desplegar la aplicación en un entorno de producción, especialmente en plataformas como Render.
+Para producción, es **obligatorio** usar una base de datos externa (como PostgreSQL en Supabase o Neon) y configurar las credenciales a través de variables de entorno para máxima seguridad.
 
-### Diferencia Clave: Desarrollo Local vs. Producción
-
-- **Desarrollo Local (usando `docker-compose`):** El sistema utiliza **SQLite** por defecto. La base de datos se guarda en un archivo local (`instance/restaurant.db`) que persiste en tu máquina gracias a los volúmenes de Docker. Esto es ideal para desarrollar y probar rápidamente.
-- **Producción (ej. Render):** Plataformas en la nube (especialmente en planes gratuitos) usan **sistemas de archivos efímeros**, lo que significa que cualquier archivo guardado localmente (como una base de datos SQLite) **se borrará permanentemente** con cada reinicio o despliegue.
-
-Por esta razón, para producción es **OBLIGATORIO** usar un servicio de base de datos externo y persistente.
-
-### 1. Configurar una Base de Datos PostgreSQL Externa
-
-La aplicación está preparada para conectarse a una base de datos PostgreSQL, que es la solución recomendada y probada para producción.
-
-1.  **Crear una cuenta en un proveedor de bases de datos:** Elige un proveedor que ofrezca un plan gratuito, como **Supabase** o **Neon**.
-2.  **Crear una nueva base de datos PostgreSQL:** Sigue las instrucciones del proveedor para crearla.
-3.  **Obtener la URL de Conexión (Connection String):** El proveedor te dará una URL que contiene todas las credenciales. Para una mejor compatibilidad con Render, busca la URL que utilice el **"Connection Pooler" (PgBouncer)**.
-
-### 2. Uso de Variables de Entorno (Mandatorio en Producción)
-
-Para máxima seguridad, **ninguna credencial o secreto debe estar escrito directamente en el código**. La aplicación está configurada para leer estos valores de variables de entorno.
-
-**Variables críticas para producción:**
-
--   `SECRET_KEY`: Una cadena de texto larga, aleatoria y secreta. Es usada por Flask para firmar las cookies de sesión.
--   `DEFAULT_ADMIN_PASSWORD`: Define la contraseña inicial para el usuario `admin` la primera vez que la base de datos se cree. Debe ser una contraseña fuerte.
--   `DATABASE_URL`: **(Obligatorio en Producción)** Aquí debes pegar la URL de conexión de tu base de datos PostgreSQL externa. La aplicación detectará esta variable y la usará en lugar de SQLite.
-
-### 3. Desactivar el Modo de Depuración (Debug)
-
-El modo de depuración de Flask **nunca** debe estar activo en producción. Al configurar la variable de entorno `FLASK_ENV=production` en tu servicio de Render, el modo de depuración se desactiva automáticamente.
-
-### 4. Cambio de Contraseña del Administrador
-
-El procedimiento para cambiar la contraseña del administrador sigue siendo el mismo, ejecutando un script dentro del contenedor de Docker.
-
-**Procedimiento en Producción (Render):**
-
-1.  **Crea el script `set_admin_password.py`** localmente (el código es el mismo que se describió anteriormente). **No lo subas a Git.**
-2.  **Abre la terminal de Render:** En el dashboard de tu servicio, ve a la pestaña **"Shell"**.
-3.  **Crea el archivo dentro del contenedor:**
-    *   Ejecuta `cat > set_admin_password.py`.
-    *   Pega el contenido del script en la terminal.
-    *   Presiona `Ctrl+D` para guardar.
-4.  **Ejecuta el script:**
-    ```bash
-    python set_admin_password.py <tu_nueva_contraseña_segura>
-    ```
-5.  **Elimina el script inmediatamente:**
-    ```bash
-    rm set_admin_password.py
-    ```
-
-### 5. Backups de la Base de Datos
-
-Al usar un servicio de base de datos externo como Supabase o Neon, ellos se encargan de la gestión de backups, lo cual es una gran ventaja. Consulta la documentación de tu proveedor para entender su política de backups y cómo realizar restauraciones si fuera necesario. El método de copiar el archivo `.db` ya no aplica.
-
-## Dockerfile
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN mkdir -p instance
-EXPOSE 5000
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "run:app"]
-```
-
-## Docker Compose
-```yaml
-services:
-  restaurant-app:
-    build: .
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./instance:/app/instance
-    environment:
-      - FLASK_ENV=production
-      - SECRET_KEY=your-secret-key
-```
-
-## Variables de Entorno
-
-### Requeridas
-- `SECRET_KEY`: Clave secreta para sesiones (cambiar en producción)
-
-### Opcionales
-- `FLASK_ENV`: Entorno de ejecución (development/production)
-- `DATABASE_URL`: URL de base de datos (por defecto SQLite)
-
-## Comandos Docker
-
-### Desarrollo
-```bash
-# Construir y levantar
-docker-compose up --build -d
-
-# Ver logs
-docker-compose logs -f
-
-# Parar servicios
-docker-compose down
-
-# Reiniciar
-docker-compose restart
-```
-
-### Producción
-```bash
-# Construir imagen optimizada
-docker build -t restaurant-system .
-
-# Ejecutar contenedor
-docker run -d -p 5000:5000 \
-  -v $(pwd)/instance:/app/instance \
-  -e SECRET_KEY=your-production-secret \
-  restaurant-system
-```
-
-## Monitoreo y Logs
-
-### Logs de Aplicación
-- **Flask**: Logs automáticos en stdout
-- **SQLAlchemy**: Logs de consultas en desarrollo
-- **SocketIO**: Logs de conexiones WebSocket
-
-### Métricas Importantes
-- Número de órdenes por día
-- Tiempo promedio de preparación
-- Productos más vendidos
-- Errores de stock
-
-## Backup y Recuperación
-
-### Base de Datos
-```bash
-# Backup
-cp instance/restaurant.db backup/restaurant_$(date +%Y%m%d).db
-
-# Restauración
-cp backup/restaurant_YYYYMMDD.db instance/restaurant.db
-```
-
-### Datos Críticos
-- Base de datos SQLite
-- Logs de aplicación
-- Reportes PDF generados
-
-## Escalabilidad
-
-### Limitaciones Actuales
-- SQLite: Máximo ~1000 transacciones concurrentes
-- Sesiones en memoria: No persisten entre reinicios
-- Archivos estáticos: Servidos por Flask (no optimizado)
-
-### Mejoras Futuras
-- PostgreSQL para mayor concurrencia
-- Redis para sesiones y cache
-- Nginx para archivos estáticos
-- Load balancer para múltiples instancias
-
-## Troubleshooting
-
-### Problemas Comunes
-
-**Error de conexión WebSocket**
-```bash
-# Verificar puerto 5000 disponible
-netstat -tulpn | grep :5000
-```
-
-**Base de datos bloqueada**
-```bash
-# Reiniciar aplicación
-docker-compose restart
-```
-
-**Permisos de archivos**
-```bash
-# Ajustar permisos de instance/
-chmod 755 instance/
-chmod 644 instance/restaurant.db
-```
-
-### Dashboard
-*   **El indicador de "Stock Bajo" no muestra los productos esperados**: El umbral para "Stock Bajo" está configurado por defecto en 5 unidades. Esto se puede cambiar en la ruta `dashboard` dentro de `app/routes/admin_routes.py`.
-
-### Logs de Debug
-```python
-# Habilitar logs detallados
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-```
-
-## Frontend Workarounds
-
-### Errores de Extensión del Navegador
-
-En algunos casos, las extensiones del navegador de los usuarios (como traductores automáticos o herramientas para guardar páginas) pueden intentar acceder a elementos del DOM que no existen en la aplicación, como `translate-page` o `save-page`. Esto puede generar errores en la consola del navegador que no se originan en el código de la aplicación.
-
-Se han intentado los siguientes workarounds en `app/templates/layouts/base.html` para mitigar estos errores:
-1.  Añadir elementos `div` ocultos con los IDs `translate-page` y `save-page`.
-2.  Añadir un script que crea dinámicamente estos elementos cuando el DOM está cargado.
-
-A pesar de estos intentos, los errores pueden persistir en la consola del navegador. Sin embargo, no parecen afectar la funcionalidad principal de la aplicación y, por el momento, se consideran un problema menor de carácter externo.
+**Variables de Entorno Críticas:**
+- `SECRET_KEY`: Clave secreta y aleatoria para firmar sesiones.
+- `DEFAULT_ADMIN_PASSWORD`: Contraseña inicial para el usuario `admin`.
+- `DATABASE_URL`: URL de conexión a la base de datos PostgreSQL externa.

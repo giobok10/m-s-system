@@ -24,17 +24,14 @@ def waiter_required(f):
 @waiter_required
 def dashboard():
     today = date.today()
-    
     active_orders = Order.query.filter(
         Order.status.in_(['pending', 'sent_to_kitchen', 'in_preparation', 'ready'])
     ).order_by(Order.created_at.desc()).all()
-    
     completed_orders = Order.query.filter(
         Order.waiter_id == current_user.id,
         Order.status == 'paid',
         db.func.date(Order.created_at) == today
     ).order_by(Order.created_at.desc()).all()
-    
     return render_template('waiter/dashboard.html', 
                          active_orders=active_orders,
                          completed_orders=completed_orders)
@@ -43,7 +40,13 @@ def dashboard():
 @login_required
 @waiter_required
 def take_order():
-    products = Product.query.filter(Product.parent_id.is_(None), Product.is_active==True, Product.category != 'Extra').order_by(Product.category, Product.name).all()
+    # Fetch products that are directly sellable
+    products = Product.query.filter(
+        Product.parent_id.is_(None), 
+        Product.is_active==True, 
+        Product.category != 'Extra'
+    ).order_by(Product.category, Product.name).all()
+    
     extras = Product.query.filter_by(is_active=True, category='Extra').order_by(Product.name).all()
     return render_template('waiter/take_order.html', products=products, extras=extras)
 
@@ -69,21 +72,25 @@ def create_order():
             product = Product.query.get(int(item_data['product_id']))
             quantity = int(item_data['quantity'])
 
-            if product.is_base_product:
-                # Simple product (Bebida, etc.)
+            if product.category == 'Combo':
+                for component_item in product.components:
+                    comp = component_item.component
+                    base_product = comp.parent if not comp.is_base_product else comp
+                    consumption = comp.stock_consumption if not comp.is_base_product else 1
+                    total_consumption = consumption * component_item.quantity * quantity
+                    stock_requirements[base_product.id] = stock_requirements.get(base_product.id, 0) + total_consumption
+            elif product.is_base_product:
                 stock_requirements[product.id] = stock_requirements.get(product.id, 0) + quantity
-            else:
-                # This is a variant, check parent stock
+            else: # Is a variant
                 parent_id = product.parent_id
                 consumption = product.stock_consumption * quantity
                 stock_requirements[parent_id] = stock_requirements.get(parent_id, 0) + consumption
 
             # Handle extras stock
             for extra_data in item_data.get('extras', []):
-                extra_id = int(extra_data['id'])
+                extra = Product.query.get(int(extra_data['id']))
                 extra_quantity = int(extra_data['quantity'])
-                # Stock for extras is consumed per main item quantity
-                stock_requirements[extra_id] = stock_requirements.get(extra_id, 0) + (extra_quantity * quantity)
+                stock_requirements[extra.id] = stock_requirements.get(extra.id, 0) + (extra_quantity * quantity)
 
         for product_id, required_stock in stock_requirements.items():
             product_to_check = Product.query.get(product_id)
@@ -98,24 +105,19 @@ def create_order():
 
         grand_total = 0
         for item_data in parsed_items:
-            product = Product.query.get(int(item_data['product_id'])) # This is the variant or simple product
+            product = Product.query.get(int(item_data['product_id']))
             quantity = int(item_data['quantity'])
             notes = item_data.get('notes', '')
             extras_data = item_data.get('extras', [])
 
             item_price = product.price
+            # Always add extras price, regardless of category
             for extra in extras_data:
                 extra_product = Product.query.get(extra['id'])
-                item_price += extra_product.price * int(extra['quantity'])
+                if extra_product:
+                    item_price += extra_product.price * int(extra['quantity'])
 
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=product.id,
-                quantity=quantity,
-                unit_price=item_price,
-                extras=json.dumps(extras_data),
-                notes=notes
-            )
+            order_item = OrderItem(order_id=order.id, product_id=product.id, quantity=quantity, unit_price=item_price, extras=json.dumps(extras_data), notes=notes)
             db.session.add(order_item)
             grand_total += item_price * quantity
         
@@ -129,13 +131,12 @@ def create_order():
                 socketio.emit('stock_update', {'product_id': product_to_update.id, 'stock': product_to_update.stock})
 
         db.session.commit()
-        
         flash('Orden creada exitosamente.', 'success')
         return redirect(url_for('waiter.view_order', order_id=order.id))
         
     except Exception as e:
-        flash(f'Error al crear la orden: {e}', 'error')
         db.session.rollback()
+        flash(f'Error al crear la orden: {e}', 'error')
         return redirect(url_for('waiter.take_order'))
 
 @waiter_bp.route('/order/<int:order_id>')
@@ -150,31 +151,25 @@ def view_order(order_id):
 @waiter_required
 def send_to_kitchen(order_id):
     order = Order.query.get_or_404(order_id)
-    
     if order.status != 'pending':
         flash('Esta orden ya fue enviada a cocina.', 'error')
         return redirect(url_for('waiter.view_order', order_id=order_id))
-    
     order.status = 'sent_to_kitchen'
     db.session.commit()
-    
     def get_display_name(product):
         if not product.is_base_product and product.parent:
             return f"{product.parent.name} ({product.name})"
         return product.name
-
-    # Emit socket event to kitchen
     socketio.emit('new_order', {
         'order_id': order.id,
         'customer_name': order.customer_name,
         'items': [{
             'product_name': get_display_name(item.product),
             'quantity': item.quantity,
-            'extras': item.extras, # Extras are sent as a JSON string
+            'extras': item.extras,
             'notes': item.notes
         } for item in order.items]
     }, room='kitchen')
-    
     flash('Orden enviada a cocina exitosamente.', 'success')
     return redirect(url_for('waiter.dashboard'))
 
@@ -183,18 +178,25 @@ def send_to_kitchen(order_id):
 @waiter_required
 def cancel_order(order_id):
     order = Order.query.get_or_404(order_id)
-    
     if order.status not in ['pending', 'sent_to_kitchen']:
         flash('No se puede cancelar esta orden.', 'error')
         return redirect(url_for('waiter.view_order', order_id=order_id))
     
     # Restore stock
     for item in order.items:
-        product = item.product # This is the variant or simple product
-        if product.is_base_product:
+        product = item.product
+        if product.category == 'Combo':
+            for component_item in product.components:
+                comp = component_item.component
+                base_product = comp.parent if not comp.is_base_product else comp
+                consumption = comp.stock_consumption if not comp.is_base_product else 1
+                total_to_restore = consumption * component_item.quantity * item.quantity
+                base_product.stock += total_to_restore
+                socketio.emit('stock_update', {'product_id': base_product.id, 'stock': base_product.stock})
+        elif product.is_base_product:
             product.stock += item.quantity
             socketio.emit('stock_update', {'product_id': product.id, 'stock': product.stock})
-        else: # It's a variant, restore parent stock
+        else: # It's a variant
             parent = product.parent
             if parent:
                 parent.stock += product.stock_consumption * item.quantity
@@ -207,53 +209,42 @@ def cancel_order(order_id):
                 for extra_data in extras_list:
                     extra_product = Product.query.get(extra_data.get('id'))
                     if extra_product:
-                        extra_quantity = int(extra_data.get('quantity', 1)) # Default to 1 for old orders
+                        extra_quantity = int(extra_data.get('quantity', 1))
                         extra_product.stock += extra_quantity * item.quantity
                         socketio.emit('stock_update', {'product_id': extra_product.id, 'stock': extra_product.stock})
             except (json.JSONDecodeError, TypeError):
-                pass # Ignore malformed old data
+                pass
     
     order.status = 'cancelled'
     db.session.commit()
-
-
+    flash('Orden cancelada y stock restaurado.', 'success')
+    return redirect(url_for('waiter.dashboard'))
 
 @waiter_bp.route('/process_payment/<int:order_id>', methods=['GET', 'POST'])
 @login_required
 @waiter_required
 def process_payment(order_id):
     order = Order.query.get_or_404(order_id)
-    
     if order.status != 'ready':
         flash('La orden debe estar lista para procesar el pago.', 'error')
         return redirect(url_for('waiter.view_order', order_id=order_id))
-    
     if request.method == 'POST':
         cash_received_str = request.form.get('cash_received')
-        
         try:
             cash_received = float(cash_received_str) if cash_received_str else 0.0
-            
             if cash_received < order.total:
                 flash('El efectivo recibido es menor al total de la orden.', 'error')
                 return render_template('waiter/process_payment.html', order=order)
-            
             change = cash_received - order.total
             order.status = 'paid'
             order.cash_received = cash_received
             order.change_given = change
             db.session.commit()
-            
             flash('Pago procesado exitosamente.', 'success')
-            return render_template('waiter/payment_receipt.html', 
-                                 order=order, 
-                                 cash_received=cash_received, 
-                                 change=change)
-            
+            return render_template('waiter/payment_receipt.html', order=order, cash_received=cash_received, change=change)
         except (ValueError, TypeError):
             flash('Monto de efectivo inválido.', 'error')
             return render_template('waiter/process_payment.html', order=order)
-    
     return render_template('waiter/process_payment.html', order=order)
 
 @waiter_bp.route('/receipt/<int:order_id>/pdf')
@@ -261,17 +252,10 @@ def process_payment(order_id):
 @waiter_required
 def receipt_pdf(order_id):
     order = Order.query.get_or_404(order_id)
-    
     cash_received = request.args.get('cash_received', default=order.cash_received or 0, type=float)
     change = request.args.get('change', default=order.change_given or 0, type=float)
-
     if order.status != 'paid':
         flash('La orden no ha sido pagada.', 'error')
         return redirect(url_for('waiter.view_order', order_id=order_id))
-
     pdf_buffer = generate_receipt_pdf(order, cash_received, change)
-    
-    return pdf_buffer, 200, {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': f'inline; filename=recibo_orden_{order.id}.pdf'
-    }
+    return pdf_buffer, 200, {'Content-Type': 'application/pdf', 'Content-Disposition': f'inline; filename=recibo_orden_{order.id}.pdf'}

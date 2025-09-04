@@ -1,3 +1,40 @@
+### 2025-09-04 (Sesión de Tarde)
+
+*   **Corrección en Cálculo de Precios de Combos (Mesero)**:
+    *   **Solucionado:** Se corrigió un error crítico que impedía que el costo de los "extras" se sumara al precio total de los "combos" al crear una orden. La lógica del backend ahora calcula y guarda correctamente el precio final, incluyendo los extras, para todos los tipos de productos.
+
+### 2025-09-04
+
+*   **Corrección en Toma de Pedidos (Mesero)**:
+    *   **Solucionado:** Se corrigió un error en la actualización visual del stock en la página de "Tomar Pedido". El stock de los productos que son componentes de un "Combo" no se estaba descontando visualmente al agregar el combo a la orden. La lógica ha sido robustecida para que ahora el consumo de stock por combos se refleje correctamente en tiempo real en el menú.
+    *   **Solucionado:** Se corrigió un error crítico que impedía agregar productos de la categoría "Principal" a una orden. El problema ocurría porque la lista de variantes del producto no se estaba enviando correctamente a la interfaz, causando un error de JavaScript que bloqueaba la aparición del modal.
+    *   **Mejora:** Si un producto de tipo "Principal" no tiene variantes definidas, ahora se mostrará un modal informativo indicando que no se puede vender, en lugar de fallar silenciosamente.
+
+*   **Mejora de Experiencia de Usuario (Mesero)**:
+    *   **Nueva Funcionalidad:** El stock visible en la página de "Tomar Pedido" ahora se actualiza dinámicamente. Cuando se agrega un producto a la "Orden Actual", el stock mostrado en el menú disminuirá visualmente, y se restaurará si el producto es eliminado de la orden. Esto proporciona un feedback inmediato y preciso del inventario disponible antes de crear la orden.
+
+### 2025-09-03 (Sesión de Tarde)
+
+*   **Nueva Funcionalidad: Sistema de Combos**:
+    *   **Descripción:** Se ha implementado un sistema completo para crear y gestionar "Combos" o paquetes de productos.
+    *   **Base de Datos:** Se añadió la tabla `combo_item` para definir las "recetas" de los combos.
+    *   **Panel de Administrador:** Se actualizó la interfaz de "Gestión de Menú" para permitir la creación y edición de productos de categoría "Combo", permitiendo al administrador asignar múltiples productos componentes y sus cantidades.
+    *   **Lógica de Stock:** Se implementó la deducción automática de stock. Al crear una orden que incluye un combo, el sistema ahora descuenta las cantidades correspondientes del stock de cada producto componente. La lógica de cancelación también fue actualizada para restaurar el stock correctamente.
+
+*   **Mejoras y Correcciones Críticas**:
+    *   **Solucionado:** Corregido un `SyntaxError` en el panel de administrador que impedía la edición de cualquier producto.
+    *   **Solucionado:** Corregido un `TypeError` crítico en la página de "Tomar Pedido" que impedía su funcionamiento.
+    *   **Solucionado:** Se corrigieron múltiples bugs en la lógica de JavaScript de "Tomar Pedido", incluyendo errores en el cálculo de stock de extras, la asignación incorrecta de extras a productos y un bug que impedía que el modal de cantidad se cerrara.
+    *   **Mejora:** Se habilitó la funcionalidad para añadir "Extras" a los productos de tipo "Combo".
+    *   **Mejora:** Se refinó la lista de productos disponibles al crear un combo para mostrar solo componentes relevantes (Principales y Bebidas).
+
+*   **Configuración y Seguridad**:
+    *   **Solucionado:** Corregido un error en `docker-compose.yml` que causaba que la contraseña de administrador por defecto se estableciera como una cadena vacía.
+    *   **Mejora:** Se cambió la contraseña por defecto del usuario `admin` a un valor más seguro.
+
+*   **Documentación**:
+    *   Actualizada la `GUIA_USUARIO.md` y `DOCUMENTACION_TECNICA.md` para reflejar todas las nuevas funcionalidades y cambios.
+
 ### 2025-09-03
 
 *   **Mejora en la Selección de Extras (Mesero)**:

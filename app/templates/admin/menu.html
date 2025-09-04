@@ -11,7 +11,7 @@
 </div>
 
 <div class="row">
-    {% for category in ['Principal', 'Bebida', 'Extra'] %}
+    {% for category in ['Principal', 'Bebida', 'Extra', 'Combo'] %}
     <div class="col-md-4 mb-4">
         <div class="card h-100">
             <div class="card-header">
@@ -24,21 +24,23 @@
                 {% else %}
                     {% for product in products_in_category %}
                     <div class="border rounded mb-3 p-2">
-                        <!-- Base Product Info -->
+                        <!-- Product Info -->
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <strong>{{ product.name }}</strong><br>
                                 {% if product.category == 'Principal' %}
                                     <small class="text-muted">Stock Base: {{ product.stock }}</small>
+                                {% elif product.category == 'Combo' %}
+                                    <small class="text-muted">Q{{ "%.2f"|format(product.price) }}</small>
                                 {% else %}
                                     <small class="text-muted">Q{{ "%.2f"|format(product.price) }} | Stock: {{ product.stock }}</small>
                                 {% endif %}
                             </div>
                             <div>
-                                <button class="btn btn-sm btn-outline-primary" onclick="editProduct({{ product.id }}, '{{ product.name }}', {{ product.price if product.price is not none else 0 }}, '{{ product.category }}', {{ product.stock }}, false, 0)">
+                                <button class="btn btn-sm btn-outline-primary edit-product-btn" data-product='{{ product.to_dict()|tojson|safe }}'>
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <form method="POST" action="{{ url_for('admin.delete_product', product_id=product.id) }}" class="d-inline" onsubmit="return confirm('¿Estás seguro de eliminar {{product.name}} y todas sus variantes?')">
+                                <form method="POST" action="{{ url_for('admin.delete_product', product_id=product.id) }}" class="d-inline" onsubmit="return confirm('¿Estás seguro de eliminar este producto?')">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -46,31 +48,30 @@
                             </div>
                         </div>
 
-                        <!-- Variants Section for Principal category -->
-                        {% if product.category == 'Principal' %}
+                        <!-- Variants or Components Section -->
+                        {% if product.category == 'Principal' or product.category == 'Combo' %}
                         <div class="mt-2 ps-3">
-                            <h6 class="text-muted small">Variantes:</h6>
-                            {% for variant in product.variants %}
-                            <div class="d-flex justify-content-between align-items-center mb-1 p-1 bg-light rounded">
-                                <div>
-                                    <span>{{ variant.name }}</span><br>
-                                    <small class="text-muted">Q{{ "%.2f"|format(variant.price) }} | Consume: {{ variant.stock_consumption }}</small>
+                            {% if product.category == 'Principal' %}
+                                <h6 class="text-muted small">Variantes:</h6>
+                                {% for variant in product.variants %}
+                                <div class="d-flex justify-content-between align-items-center mb-1 p-1 bg-light rounded">
+                                    <div>
+                                        <span>{{ variant.name }}</span><br>
+                                        <small class="text-muted">Q{{ "%.2f"|format(variant.price) }} | Consume: {{ variant.stock_consumption }}</small>
+                                    </div>
                                 </div>
-                                <div>
-                                     <button class="btn btn-sm btn-outline-secondary" onclick="editProduct({{ variant.id }}, '{{ variant.name }}', {{ variant.price }}, '{{ variant.category }}', 0, true, {{ variant.stock_consumption }})">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <form method="POST" action="{{ url_for('admin.delete_product', product_id=variant.id) }}" class="d-inline" onsubmit="return confirm('¿Estás seguro?')">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                            {% endfor %}
-                            <button class="btn btn-sm btn-success mt-2" onclick="openAddVariantModal({{ product.id }})">
-                                <i class="fas fa-plus"></i> Agregar Variante
-                            </button>
+                                {% endfor %}
+                                <button class="btn btn-sm btn-success mt-2" onclick="openAddVariantModal({{ product.id }})">
+                                    <i class="fas fa-plus"></i> Agregar Variante
+                                </button>
+                            {% elif product.category == 'Combo' %}
+                                <h6 class="text-muted small">Componentes:</h6>
+                                {% for item in product.components %}
+                                    <div class="d-flex justify-content-between align-items-center mb-1 p-1 bg-light rounded">
+                                        <span>{{ item.component.name }} (x{{ item.quantity }})</span>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
                         </div>
                         {% endif %}
                     </div>
@@ -84,7 +85,7 @@
 
 <!-- Add Product Modal -->
 <div class="modal fade" id="addProductModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Agregar Producto</h5>
@@ -94,24 +95,30 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="category" class="form-label">Categoría</label>
-                        <select class="form-control" id="category" name="category" required onchange="togglePriceField()">
+                        <select class="form-control" id="category" name="category" required onchange="toggleFields('add')">
                             <option value="">Seleccionar...</option>
-                            <option value="Principal">Principal (Producto Base)</option>
+                            <option value="Principal">Principal (Producto Base con Stock)</option>
                             <option value="Bebida">Bebida</option>
                             <option value="Extra">Extra</option>
+                            <option value="Combo">Combo (Paquete de productos)</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label for="name" class="form-label">Nombre</label>
                         <input type="text" class="form-control" id="name" name="name" required>
                     </div>
-                    <div class="mb-3" id="price-field-group">
+                    <div class="mb-3" id="add-price-group">
                         <label for="price" class="form-label">Precio</label>
                         <input type="number" step="0.01" class="form-control" id="price" name="price">
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" id="add-stock-group">
                         <label for="stock" class="form-label">Stock Inicial</label>
-                        <input type="number" class="form-control" id="stock" name="stock" value="0" required>
+                        <input type="number" class="form-control" id="stock" name="stock" value="0">
+                    </div>
+                    <div class="mb-3 d-none" id="add-combo-group">
+                        <h5>Componentes del Combo</h5>
+                        <div id="add-combo-list"></div>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addComboComponent('add')">Agregar Componente</button>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -123,7 +130,45 @@
     </div>
 </div>
 
-<!-- Add Variant Modal -->
+<!-- Edit Product Modal -->
+<div class="modal fade" id="editProductModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Editar Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="editProductForm">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_category_hidden" name="category">
+                    <div class="mb-3">
+                        <label for="edit_name" class="form-label">Nombre</label>
+                        <input type="text" class="form-control" id="edit_name" name="name" required>
+                    </div>
+                    <div class="mb-3" id="edit-price-group">
+                        <label for="edit_price" class="form-label">Precio</label>
+                        <input type="number" step="0.01" class="form-control" id="edit_price" name="price">
+                    </div>
+                    <div class="mb-3" id="edit-stock-group">
+                        <label for="edit_stock" class="form-label">Stock</label>
+                        <input type="number" class="form-control" id="edit_stock" name="stock">
+                    </div>
+                    <div class="mb-3 d-none" id="edit-combo-group">
+                        <h5>Componentes del Combo</h5>
+                        <div id="edit-combo-list"></div>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addComboComponent('edit')">Agregar Componente</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Actualizar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Variant Modal (existing, no changes needed) -->
 <div class="modal fade" id="addVariantModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -134,7 +179,7 @@
             <form method="POST" id="addVariantForm">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="variant_name" class="form-label">Nombre de la Variante (ej. Unidad, Porción)</label>
+                        <label for="variant_name" class="form-label">Nombre de la Variante</label>
                         <input type="text" class="form-control" id="variant_name" name="variant_name" required>
                     </div>
                     <div class="mb-3">
@@ -144,7 +189,6 @@
                     <div class="mb-3">
                         <label for="variant_consumption" class="form-label">Consumo de Stock</label>
                         <input type="number" class="form-control" id="variant_consumption" name="variant_consumption" value="1" required>
-                        <small class="form-text text-muted">Cuántas unidades del stock base consume esta variante.</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -156,65 +200,102 @@
     </div>
 </div>
 
-
-<!-- Edit Product Modal -->
-<div class="modal fade" id="editProductModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Editar Producto</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" id="editProductForm">
-                <div class="modal-body">
-                    <div class="mb-3" id="edit-name-group">
-                        <label for="edit_name" class="form-label">Nombre</label>
-                        <input type="text" class="form-control" id="edit_name" name="name" required>
-                    </div>
-                    <div class="mb-3" id="edit-price-group">
-                        <label for="edit_price" class="form-label">Precio</label>
-                        <input type="number" step="0.01" class="form-control" id="edit_price" name="price" required>
-                    </div>
-                    <div class="mb-3" id="edit-stock-group">
-                        <label for="edit_stock" class="form-label">Stock</label>
-                        <input type="number" class="form-control" id="edit_stock" name="stock" required>
-                    </div>
-                    <div class="mb-3" id="edit-consumption-group">
-                        <label for="edit_stock_consumption" class="form-label">Consumo de Stock</label>
-                        <input type="number" class="form-control" id="edit_stock_consumption" name="stock_consumption" required>
-                    </div>
-                     <div class="mb-3" id="edit-category-group">
-                        <label for="edit_category" class="form-label">Categoría</label>
-                        <select class="form-control" id="edit_category" name="category" required>
-                            <option value="Principal">Principal</option>
-                            <option value="Bebida">Bebida</option>
-                            <option value="Extra">Extra</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Actualizar</button>
-                </div>
-            </form>
+<!-- Hidden template for combo component row -->
+<div id="combo-component-template" class="d-none">
+    <div class="row align-items-center mb-2 component-row">
+        <div class="col-7">
+            <select class="form-control component-id" name="component_ids[]">
+                <option value="">Seleccionar producto...</option>
+                {% for comp_product in component_products %}
+                    <option value="{{ comp_product.id }}">{{ comp_product.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-3">
+            <input type="number" class="form-control component-quantity" name="component_quantities[]" value="1" min="1">
+        </div>
+        <div class="col-2">
+            <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.component-row').remove()"><i class="fas fa-trash"></i></button>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-function togglePriceField() {
-    var category = document.getElementById('category').value;
-    var priceGroup = document.getElementById('price-field-group');
-    var priceInput = document.getElementById('price');
+// Make component_products available to JS
+const COMPONENT_PRODUCTS = {{ component_products|tojson|safe }};
+
+function toggleFields(formType) {
+    const category = document.getElementById(formType === 'add' ? 'category' : 'edit_category').value;
+    const priceGroup = document.getElementById(formType + '-price-group');
+    const stockGroup = document.getElementById(formType + '-stock-group');
+    const comboGroup = document.getElementById(formType + '-combo-group');
+
+    priceGroup.style.display = 'none';
+    stockGroup.style.display = 'none';
+    comboGroup.classList.add('d-none');
+
     if (category === 'Principal') {
-        priceGroup.style.display = 'none';
-        priceInput.required = false;
-    } else {
+        stockGroup.style.display = 'block';
+    } else if (category === 'Bebida' || category === 'Extra') {
         priceGroup.style.display = 'block';
-        priceInput.required = true;
+        stockGroup.style.display = 'block';
+    } else if (category === 'Combo') {
+        priceGroup.style.display = 'block';
+        comboGroup.classList.remove('d-none');
     }
+}
+
+function addComboComponent(formType) {
+    const list = document.getElementById(formType + '-combo-list');
+    const template = document.getElementById('combo-component-template').firstElementChild.cloneNode(true);
+    list.appendChild(template);
+}
+
+function editProduct(product) {
+    const form = document.getElementById('editProductForm');
+    form.action = '/admin/edit_product/' + product.id;
+
+    document.getElementById('edit_name').value = product.name;
+    document.getElementById('edit_category_hidden').value = product.category;
+
+    const priceGroup = document.getElementById('edit-price-group');
+    const stockGroup = document.getElementById('edit-stock-group');
+    const comboGroup = document.getElementById('edit-combo-group');
+    const comboList = document.getElementById('edit-combo-list');
+
+    priceGroup.style.display = 'none';
+    stockGroup.style.display = 'none';
+    comboGroup.classList.add('d-none');
+    comboList.innerHTML = '';
+
+    if (product.category === 'Principal') {
+        stockGroup.style.display = 'block';
+        document.getElementById('edit_stock').value = product.stock;
+    } else if (product.category === 'Bebida' || product.category === 'Extra') {
+        priceGroup.style.display = 'block';
+        stockGroup.style.display = 'block';
+        document.getElementById('edit_price').value = product.price;
+        document.getElementById('edit_stock').value = product.stock;
+    } else if (product.category === 'Combo') {
+        priceGroup.style.display = 'block';
+        comboGroup.classList.remove('d-none');
+        document.getElementById('edit_price').value = product.price;
+
+        if (product.components && product.components.length > 0) {
+            product.components.forEach(item => {
+                const template = document.getElementById('combo-component-template').firstElementChild.cloneNode(true);
+                template.querySelector('.component-id').value = item.component_product_id;
+                template.querySelector('.component-quantity').value = item.quantity;
+                comboList.appendChild(template);
+            });
+        }
+    }
+
+    var modal = new bootstrap.Modal(document.getElementById('editProductModal'));
+    modal.show();
 }
 
 function openAddVariantModal(parentId) {
@@ -223,87 +304,15 @@ function openAddVariantModal(parentId) {
     modal.show();
 }
 
-function editProduct(id, name, price, category, stock, isVariant, stockConsumption) {
-    // Set form action
-    document.getElementById('editProductForm').action = '/admin/edit_product/' + id;
-
-    // Get all field groups
-    const nameGroup = document.getElementById('edit-name-group');
-    const priceGroup = document.getElementById('edit-price-group');
-    const stockGroup = document.getElementById('edit-stock-group');
-    const consumptionGroup = document.getElementById('edit-consumption-group');
-    const categoryGroup = document.getElementById('edit-category-group');
-
-    // Get all fields
-    const nameInput = document.getElementById('edit_name');
-    const priceInput = document.getElementById('edit_price');
-    const stockInput = document.getElementById('edit_stock');
-    const consumptionInput = document.getElementById('edit_stock_consumption');
-    const categoryInput = document.getElementById('edit_category');
-
-    // Set common value
-    nameInput.value = name;
-
-    if (isVariant) {
-        // --- Editing a Variant ---
-        priceInput.value = price;
-        consumptionInput.value = stockConsumption;
-
-        // Show/hide fields
-        priceGroup.style.display = 'block';
-        consumptionGroup.style.display = 'block';
-        stockGroup.style.display = 'none';
-        categoryGroup.style.display = 'none';
-
-        // Set required status
-        priceInput.required = true;
-        consumptionInput.required = true;
-        stockInput.required = false;
-        categoryInput.required = false;
-
-    } else if (category === 'Principal') {
-        // --- Editing a Base Product ---
-        stockInput.value = stock;
-        categoryInput.value = category;
-
-        // Show/hide fields
-        stockGroup.style.display = 'block';
-        categoryGroup.style.display = 'block';
-        priceGroup.style.display = 'none';
-        consumptionGroup.style.display = 'none';
-        
-        // Set required status
-        stockInput.required = true;
-        categoryInput.required = true;
-        priceInput.required = false;
-        consumptionInput.required = false;
-
-    } else {
-        // --- Editing a Simple Product (Bebida, Extra) ---
-        priceInput.value = price;
-        stockInput.value = stock;
-        categoryInput.value = category;
-
-        // Show/hide fields
-        priceGroup.style.display = 'block';
-        stockGroup.style.display = 'block';
-        categoryGroup.style.display = 'block';
-        consumptionGroup.style.display = 'none';
-
-        // Set required status
-        priceInput.required = true;
-        stockInput.required = true;
-        categoryInput.required = true;
-        consumptionInput.required = false;
-    }
-    
-    var modal = new bootstrap.Modal(document.getElementById('editProductModal'));
-    modal.show();
-}
-
-// Initialize the form state when the page loads
 document.addEventListener('DOMContentLoaded', function() {
-    togglePriceField();
+    toggleFields('add');
+
+    document.querySelectorAll('.edit-product-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const productData = JSON.parse(this.dataset.product);
+            editProduct(productData);
+        });
+    });
 });
 </script>
 {% endblock %}

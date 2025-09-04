@@ -5,24 +5,20 @@
 {% block content %}
 <div class="row">
     <!-- Menu Column -->
-    <div class="col-md-8">
+    <div class="col-md-7">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-utensils"></i> Menú</h5>
             </div>
             <div class="card-body">
-                {% for category in ['Principal', 'Bebida'] %}
-                <h6 class="text-primary">{{ category }}</h6>
+                {% for category in ['Principal', 'Bebida', 'Combo'] %}
+                <h6 class="text-primary mt-3">{{ category }}</h6>
                 <div class="row mb-4">
                     {% for product in products if product.category == category %}
                     <div class="col-md-6 mb-2">
-                        <div class="card product-card"
-                             data-product-id="{{ product.id }}"
-                             data-product-name="{{ product.name }}"
-                             data-product-price="{{ product.price if product.price is not none else 0 }}"
-                             data-product-category="{{ product.category }}"
-                             data-product-stock="{{ product.stock }}"
-                             data-variants='{{ product.variants_as_dicts | tojson }}'>
+                        <div class="card product-card h-100" 
+                             data-product='{{ product.to_dict()|tojson|safe }}' 
+                             style="cursor: pointer;">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
@@ -31,6 +27,8 @@
                                             <small class="text-{{ 'success' if product.stock > 5 else 'warning' if product.stock > 0 else 'danger' }}" data-stock-id="{{ product.id }}">
                                                 Stock Base: {{ product.stock }}
                                             </small>
+                                        {% elif product.category == 'Combo' %}
+                                            <small class="text-muted">Q{{ "%.2f"|format(product.price) }}</small>
                                         {% else %}
                                             <p class="mb-0 text-muted">Q{{ "%.2f"|format(product.price) }}</p>
                                             <small class="text-{{ 'success' if product.stock > 5 else 'warning' if product.stock > 0 else 'danger' }}" data-stock-id="{{ product.id }}">
@@ -38,7 +36,7 @@
                                             </small>
                                         {% endif %}
                                     </div>
-                                    <button class="btn btn-outline-primary btn-sm add-product-btn" {{ 'disabled' if product.stock == 0 else '' }}>
+                                    <button class="btn btn-outline-primary btn-sm add-product-btn" {{ 'disabled' if product.stock == 0 and product.category != 'Combo' else '' }}>
                                         <i class="fas fa-plus"></i>
                                     </button>
                                 </div>
@@ -53,7 +51,7 @@
     </div>
     
     <!-- Order Column -->
-    <div class="col-md-4">
+    <div class="col-md-5">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-shopping-cart"></i> Orden Actual</h5>
@@ -65,10 +63,10 @@
                         <input type="text" class="form-control" id="customer_name" name="customer_name">
                     </div>
                     <div class="mb-3">
-                        <label for="customer_phone" class="form-label">Teléfono del Cliente (Opcional)</label>
-                        <input type="text" class="form-control" id="customer_phone" name="customer_phone" placeholder="Ingrese el teléfono">
+                        <label for="customer_phone" class="form-label">Teléfono (Opcional)</label>
+                        <input type="text" class="form-control" id="customer_phone" name="customer_phone">
                     </div>
-                    <div id="orderItems">
+                    <div id="orderItems" style="min-height: 100px;">
                         <p class="text-muted text-center">No hay productos seleccionados</p>
                     </div>
                     <hr>
@@ -86,7 +84,7 @@
     </div>
 </div>
 
-<!-- Variant Selection Modal -->
+<!-- Modals -->
 <div class="modal fade" id="variantModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -94,15 +92,11 @@
                 <h5 class="modal-title" id="variantModalTitle">Seleccionar Variante</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="variantModalBody">
-                <!-- Variants will be injected here by JS -->
-            </div>
+            <div class="modal-body" id="variantModalBody"></div>
         </div>
     </div>
 </div>
 
-
-<!-- Quantity & Extras Modal -->
 <div class="modal fade" id="quantityModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -153,22 +147,20 @@
 {% block scripts %}
 <script>
 let orderItems = [];
-let currentProduct = null; // Will hold the product or variant to be added
-let baseProduct = null; // Will hold the base product when a variant is selected
+let currentProductData = null;
+let currentVariant = null;
 
 const quantityModal = new bootstrap.Modal(document.getElementById('quantityModal'));
 const variantModal = new bootstrap.Modal(document.getElementById('variantModal'));
 
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.add-product-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const card = this.closest('.product-card');
-            const category = card.dataset.productCategory;
-
-            if (category === 'Principal') {
-                openVariantModal(card);
+    document.querySelectorAll('.product-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const product = JSON.parse(this.dataset.product);
+            if (product.category === 'Principal') {
+                openVariantModal(product);
             } else {
-                openQuantityModal(card);
+                openQuantityModal(product);
             }
         });
     });
@@ -177,25 +169,25 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('orderForm').addEventListener('submit', submitOrder);
 });
 
-function openVariantModal(card) {
-    baseProduct = card.dataset;
-    const variants = JSON.parse(baseProduct.variants);
+function openVariantModal(product) {
+    currentProductData = product;
+    const variants = product.variants;
     
-    document.getElementById('variantModalTitle').textContent = `Seleccionar variante para ${baseProduct.productName}`;
+    document.getElementById('variantModalTitle').textContent = `Seleccionar variante para ${product.name}`;
     const body = document.getElementById('variantModalBody');
     body.innerHTML = '';
 
-    if (variants.length === 0) {
-        body.innerHTML = '<p class="text-muted">Este producto no tiene variantes definidas.</p>';
+    if (!variants || variants.length === 0) {
+        body.innerHTML = '<p class="text-muted">Este producto no tiene variantes definidas y no se puede vender directamente.</p>';
     } else {
         variants.forEach(variant => {
             const btn = document.createElement('button');
             btn.className = 'btn btn-outline-primary w-100 mb-2';
             btn.textContent = `${variant.name} - Q${variant.price.toFixed(2)}`;
             btn.onclick = () => {
-                currentProduct = variant;
+                currentVariant = variant;
                 variantModal.hide();
-                openQuantityModal(card, variant);
+                openQuantityModal(product, variant);
             };
             body.appendChild(btn);
         });
@@ -203,51 +195,53 @@ function openVariantModal(card) {
     variantModal.show();
 }
 
-function openQuantityModal(card, variant = null) {
-    const cardData = card.dataset;
-    currentProduct = variant ? variant : {
-        id: cardData.productId,
-        name: cardData.productName,
-        price: parseFloat(cardData.productPrice),
-        stock: parseInt(cardData.productStock),
-        is_base_product: true
-    };
+function openQuantityModal(product, variant = null) {
+    currentProductData = product;
+    currentVariant = variant;
 
-    let stockToCheck, consumptionRate, baseProductId;
-    if (variant) {
-        baseProduct = cardData;
-        stockToCheck = parseInt(baseProduct.productStock);
-        consumptionRate = currentProduct.stock_consumption;
-        baseProductId = baseProduct.productId;
+    const itemBeingAdded = variant || product;
+    document.getElementById('quantityModalTitle').textContent = 'Agregar ' + itemBeingAdded.name;
+    
+    // Reset modal state
+    document.getElementById('quantity').value = 1;
+    document.getElementById('notes').value = '';
+    document.querySelectorAll('.extra-quantity-input').forEach(input => input.value = 0);
+
+    updateStockInfo();
+    quantityModal.show();
+}
+
+function updateStockInfo() {
+    const itemBeingAdded = currentVariant || currentProductData;
+    const isCombo = currentProductData.category === 'Combo';
+
+    if (isCombo) {
+        document.getElementById('availableStock').textContent = 'N/A (se valida al crear)';
+        document.getElementById('quantity').removeAttribute('max');
+        document.getElementById('addToOrderBtn').disabled = false;
     } else {
-        stockToCheck = currentProduct.stock;
-        consumptionRate = 1;
-        baseProductId = null;
+        const stockToCheck = currentVariant ? currentProductData.stock : itemBeingAdded.stock;
+        const consumptionRate = currentVariant ? currentVariant.stock_consumption : 1;
+        const baseProductId = currentVariant ? currentProductData.id : null;
+        const quantityInCart = getQuantityInCart(itemBeingAdded.id, baseProductId);
+        const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
+        
+        document.getElementById('availableStock').textContent = availableStockUnits;
+        const quantityInput = document.getElementById('quantity');
+        quantityInput.max = availableStockUnits > 0 ? availableStockUnits : 0;
+        quantityInput.disabled = availableStockUnits <= 0;
+        document.getElementById('addToOrderBtn').disabled = availableStockUnits <= 0;
     }
 
-    const quantityInCart = getQuantityInCart(currentProduct.id, baseProductId);
-    const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
-
-    document.getElementById('quantityModalTitle').textContent = 'Agregar ' + currentProduct.name;
-    document.getElementById('availableStock').textContent = availableStockUnits;
-    
-    const quantityInput = document.getElementById('quantity');
-    quantityInput.max = availableStockUnits > 0 ? availableStockUnits : 0;
-    quantityInput.value = 1;
-    quantityInput.disabled = availableStockUnits <= 0;
-    document.getElementById('addToOrderBtn').disabled = availableStockUnits <= 0;
-
-    // Handle Extras
+    // Update extras stock
     document.querySelectorAll('.extra-quantity-input').forEach(input => {
         const extraId = input.dataset.extraId;
         const extraStock = parseInt(input.dataset.extraStock);
         const extraQuantityInCart = getExtraQuantityInCart(extraId);
         const availableExtraStock = extraStock - extraQuantityInCart;
+        const stockLabel = input.previousElementSibling.querySelector('small');
         
-        const stockLabel = document.querySelector(`[data-stock-id="extra-${extraId}"]`);
         input.max = availableExtraStock;
-        input.value = 0;
-
         if (availableExtraStock <= 0) {
             stockLabel.textContent = ' (Agotado)';
             input.disabled = true;
@@ -256,17 +250,15 @@ function openQuantityModal(card, variant = null) {
             input.disabled = false;
         }
     });
-
-    document.getElementById('notes').value = '';
-    quantityModal.show();
 }
 
 function addToOrder() {
     const quantity = parseInt(document.getElementById('quantity').value);
-    if (quantity <= 0) return;
+    if (isNaN(quantity) || quantity <= 0) return;
 
+    const itemBeingAdded = currentVariant || currentProductData;
     const notes = document.getElementById('notes').value;
-    let itemPrice = currentProduct.price;
+    let itemPrice = itemBeingAdded.price;
     const selectedExtras = [];
     const extraNames = [];
 
@@ -275,68 +267,55 @@ function addToOrder() {
         if (extraQuantity > 0) {
             const extraPrice = parseFloat(input.dataset.extraPrice);
             itemPrice += extraPrice * extraQuantity;
-            selectedExtras.push({
-                id: input.dataset.extraId,
-                name: input.dataset.extraName,
-                price: extraPrice,
-                quantity: extraQuantity
-            });
+            selectedExtras.push({ id: input.dataset.extraId, name: input.dataset.extraName, price: extraPrice, quantity: extraQuantity });
             extraNames.push(`${input.dataset.extraName} (x${extraQuantity})`);
         }
     });
 
-    // Re-calculate available stock for the main product/variant before adding
-    let stockToCheck, consumptionRate, baseProductId;
-    if (currentProduct.is_base_product) {
-        stockToCheck = currentProduct.stock;
-        consumptionRate = 1;
-        baseProductId = null;
-    } else {
-        stockToCheck = parseInt(baseProduct.productStock);
-        consumptionRate = currentProduct.stock_consumption;
-        baseProductId = baseProduct.productId;
-    }
-
-    const quantityInCart = getQuantityInCart(currentProduct.id, baseProductId);
-    const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
-
-    if (quantity > availableStockUnits) {
-        alert(`No hay suficiente stock disponible para agregar ${quantity} unidades de ${currentProduct.name}. Solo quedan ${availableStockUnits}.`);
-        return;
-    }
-
     const item = {
-        product_id: currentProduct.id,
-        display_name: currentProduct.is_base_product ? currentProduct.name : `${baseProduct.productName} (${currentProduct.name})`,
-        name: currentProduct.name,
+        product_id: itemBeingAdded.id,
+        display_name: currentVariant ? `${currentProductData.name} (${currentVariant.name})` : itemBeingAdded.name,
         price: itemPrice,
         quantity: quantity,
         extras: selectedExtras,
         notes: notes,
         total: itemPrice * quantity,
-        is_variant: !currentProduct.is_base_product,
-        base_product_id: baseProduct ? baseProduct.productId : null,
-        stock_consumption: currentProduct.stock_consumption || 1,
-        displayExtras: extraNames.join(', ')
+        base_product_id: currentVariant ? currentProductData.id : null,
+        stock_consumption: currentVariant ? currentVariant.stock_consumption : 1,
+        displayExtras: extraNames.join(', '),
+        components: currentProductData.category === 'Combo' ? currentProductData.components : []
     };
 
     orderItems.push(item);
     updateOrderDisplay();
     quantityModal.hide();
-    baseProduct = null;
 }
 
 function getQuantityInCart(productId, baseProductId = null) {
     let totalConsumption = 0;
     orderItems.forEach(item => {
-        if (baseProductId) {
-            if (item.base_product_id === baseProductId) {
-                totalConsumption += item.quantity * item.stock_consumption;
-            }
-        } else {
-            if (String(item.product_id) === String(productId)) {
-                totalConsumption += item.quantity;
-            }
+        // Case 1: Direct match (item is a variant of the base product being checked)
+        if (baseProductId && item.base_product_id === baseProductId) {
+            totalConsumption += item.quantity * item.stock_consumption;
+        }
+
+        // Case 2: Direct match (item is a simple product being checked)
+        if (productId && !baseProductId && String(item.product_id) === String(productId)) {
+            totalConsumption += item.quantity;
+        }
+
+        // Case 3: Indirect match (item is a combo that contains the product being checked)
+        if (item.components && item.components.length > 0) {
+            item.components.forEach(component => {
+                // Check if the component's product ID matches the base product ID we are looking for
+                if (baseProductId && String(component.component_product_id) === String(baseProductId)) {
+                    totalConsumption += component.quantity * item.quantity;
+                }
+                // Check if the component's product ID matches the simple product ID we are looking for
+                if (productId && !baseProductId && String(component.component_product_id) === String(productId)) {
+                    totalConsumption += component.quantity * item.quantity;
+                }
+            });
         }
     });
     return totalConsumption;
@@ -345,14 +324,11 @@ function getQuantityInCart(productId, baseProductId = null) {
 function getExtraQuantityInCart(extraId) {
     let total = 0;
     orderItems.forEach(item => {
-        if (item.extras) {
-            item.extras.forEach(extra => {
-                if (String(extra.id) === String(extraId)) {
-                    // Total extras needed = (quantity of this extra) * (quantity of main item)
-                    total += extra.quantity * item.quantity;
-                }
-            });
-        }
+        item.extras.forEach(extra => {
+            if (String(extra.id) === String(extraId)) {
+                total += extra.quantity * item.quantity;
+            }
+        });
     });
     return total;
 }
@@ -399,18 +375,43 @@ function removeItem(index) {
 
 function updateAllCardStocks() {
     document.querySelectorAll('.product-card').forEach(card => {
-        const productId = card.dataset.productId;
-        const stockElement = card.querySelector(`[data-stock-id="${productId}"]`);
-        const initialStock = parseInt(card.dataset.productStock);
-        const consumed = getQuantityInCart(productId, card.dataset.productCategory === 'Principal' ? productId : null);
-        const remaining = initialStock - consumed;
-        
-        if (card.dataset.productCategory === 'Principal') {
-            stockElement.textContent = `Stock Base: ${remaining}`;
+        const product = JSON.parse(card.dataset.product);
+        const stockElement = card.querySelector(`[data-stock-id='${product.id}']`);
+        const addButton = card.querySelector('.add-product-btn');
+
+        if (!stockElement) return; // Skip combos or items without stock display
+
+        let stockInCart = 0;
+        if (product.category === 'Principal') {
+            // For base products, sum consumption of all its variants in the cart
+            stockInCart = getQuantityInCart(null, product.id);
         } else {
-            stockElement.textContent = `Stock: ${remaining}`;
+            // For simple products (Bebida)
+            stockInCart = getQuantityInCart(product.id);
         }
-        card.querySelector('.add-product-btn').disabled = remaining <= 0;
+
+        const remainingStock = product.stock - stockInCart;
+        
+        if (product.category === 'Principal') {
+            stockElement.textContent = `Stock Base: ${remainingStock}`;
+        } else {
+            stockElement.textContent = `Stock: ${remainingStock}`;
+        }
+
+        // Update color based on remaining stock
+        stockElement.classList.remove('text-success', 'text-warning', 'text-danger');
+        if (remainingStock > 5) {
+            stockElement.classList.add('text-success');
+        } else if (remainingStock > 0) {
+            stockElement.classList.add('text-warning');
+        } else {
+            stockElement.classList.add('text-danger');
+        }
+
+        // Disable button if no stock left
+        if (addButton) {
+            addButton.disabled = remainingStock <= 0;
+        }
     });
 }
 
@@ -420,7 +421,8 @@ function submitOrder(e) {
         alert("No se puede crear una orden vacía.");
         return;
     }
-    this.querySelectorAll('input[name="items"]').forEach(inp => inp.remove());
+    const form = e.target;
+    form.querySelectorAll('input[name="items"]').forEach(inp => inp.remove());
     orderItems.forEach(item => {
         const input = document.createElement('input');
         input.type = 'hidden';
@@ -432,7 +434,7 @@ function submitOrder(e) {
             notes: item.notes 
         };
         input.value = JSON.stringify(submitItem);
-        this.appendChild(input);
+        form.appendChild(input);
     });
 }
 </script>
