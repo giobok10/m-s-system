@@ -282,7 +282,7 @@ def reports():
         start_date_local = today_local - timedelta(days=today_local.weekday())
         end_date_local = start_date_local + timedelta(days=6)
         period_label = f"Semana del {start_date_local.strftime('%d/%m')} al {end_date_local.strftime('%d/%m')}"
-    else: # monthly
+    else:  # monthly
         start_date_local = today_local.replace(day=1)
         next_month = start_date_local.replace(day=28) + timedelta(days=4)
         end_date_local = next_month - timedelta(days=next_month.day)
@@ -290,6 +290,18 @@ def reports():
 
     start_range_utc, end_range_utc = get_day_range_utc(start_date_local)[0], get_day_range_utc(end_date_local)[1]
     logging.warning(f"[REPORTS] Querying for UTC range: {start_range_utc} to {end_range_utc}")
+
+    # --- Correctly query and build report_data ---
+    total_sales_query = db.session.query(db.func.sum(Order.total)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
+    total_orders_query = db.session.query(db.func.count(Order.id)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
+
+    top_products_query = db.session.query(
+        Product.name,
+        db.func.sum(OrderItem.quantity).label('total_quantity')
+    ).join(OrderItem, OrderItem.product_id == Product.id)\
+     .join(Order, Order.id == OrderItem.order_id)\
+     .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc))\
+     .group_by(Product.name).order_by(db.desc('total_quantity')).limit(5).all()
 
     grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
@@ -302,13 +314,22 @@ def reports():
     logging.warning(f"[REPORTS] Top day query result: {top_day_query}")
 
     dia_mas_ventas_str = "N/A"
-    if top_day_query:
-        sale_day_obj = top_day_query.sale_day
-        dia_mas_ventas_str = f"{sale_day_obj.strftime('%A, %d de %B')} (Total: Q{top_day_query.total_sales:.2f})"
-    
+    if top_day_query and top_day_query.sale_day:
+        # Convert the UTC date from the database back to local GT time for display
+        sale_day_local = top_day_query.sale_day.astimezone(guatemala_tz)
+        dia_mas_ventas_str = f"{sale_day_local.strftime('%A, %d de %B')} (Total: Q{top_day_query.total_sales:.2f})"
+
     logging.warning(f"[REPORTS] Final 'dia_mas_ventas_str': {dia_mas_ventas_str}")
-    # The rest of the function is omitted for brevity as it was correct
-    # ...
+
+    report_data = {
+        'period_label': period_label,
+        'total_sales': total_sales_query,
+        'total_orders': total_orders_query,
+        'top_selling_products': top_products_query,
+        'dia_mas_ventas': dia_mas_ventas_str
+    }
+    # --- End of report_data section ---
+
     return render_template('admin/reports.html', report_data=report_data, period=period)
 
 
@@ -319,7 +340,12 @@ def daily_close():
     logging.warning("--- ENTERING DAILY CLOSE ROUTE ---")
     today_local = get_current_gt_datetime().date()
     start_of_day_utc, end_of_day_utc = get_day_range_utc(today_local)
+    today_date_str = today_local.strftime('%A, %d de %B de %Y')
     logging.warning(f"[DAILY_CLOSE] Today is {today_local}. UTC range: {start_of_day_utc} to {end_of_day_utc}")
+
+    # --- Initialize variables for GET request ---
+    total_sales = 0
+    orders_data = []
 
     if request.method == 'POST':
         logging.warning("[DAILY_CLOSE] POST request received.")
@@ -327,38 +353,91 @@ def daily_close():
         try:
             cash_in_register = float(cash_in_register)
             total_sales = db.session.query(db.func.sum(Order.total)).filter(
-                Order.created_at.between(start_of_day_utc, end_of_day_utc), 
+                Order.created_at.between(start_of_day_utc, end_of_day_utc),
                 Order.status == 'paid'
             ).scalar() or 0
             logging.warning(f"[DAILY_CLOSE] Calculated total_sales in POST: {total_sales}")
+            
             daily_report = DailyReport.query.filter_by(date=today_local).first()
-            # ... (rest of POST is fine)
+            if not daily_report:
+                daily_report = DailyReport(date=today_local)
+                db.session.add(daily_report)
+            
+            daily_report.total_sales = total_sales
+            daily_report.cash_in_register = cash_in_register
+            daily_report.difference = cash_in_register - total_sales
+            daily_report.closed_at = get_current_gt_datetime()
+            
+            db.session.commit()
+            flash('Cierre de caja actualizado exitosamente.', 'success')
+            logging.warning(f"[DAILY_CLOSE] Daily report for {today_local} updated.")
+            return redirect(url_for('admin.daily_close'))
+
         except Exception as e:
             logging.error(f"[DAILY_CLOSE] Error in POST: {e}")
+            flash('Error al procesar el cierre de caja.', 'error')
+            db.session.rollback()
 
+    # --- Logic for GET request ---
     daily_report = DailyReport.query.filter_by(date=today_local).first()
     if daily_report:
         logging.warning(f"[DAILY_CLOSE] Found existing daily_report for {today_local} with total sales: {daily_report.total_sales}")
+        total_sales = daily_report.total_sales
     else:
-        logging.warning(f"[DAILY_CLOSE] No daily_report found for {today_local}.")
+        # If no report, calculate sales for the day so far
+        logging.warning(f"[DAILY_CLOSE] No daily_report found for {today_local}. Calculating current sales.")
+        total_sales = db.session.query(db.func.sum(Order.total)).filter(
+            Order.created_at.between(start_of_day_utc, end_of_day_utc),
+            Order.status == 'paid'
+        ).scalar() or 0
+
+    # Fetch orders for display
+    orders = Order.query.filter(
+        Order.created_at.between(start_of_day_utc, end_of_day_utc),
+        Order.status.in_(['paid', 'cancelled'])
+    ).order_by(Order.created_at.desc()).all()
+    orders_data = [{'order': order.to_dict(), 'waiter_name': order.waiter.full_name if order.waiter else 'N/A'} for order in orders]
 
     if 'download' in request.args and request.args.get('download') == 'pdf':
         logging.warning("[DAILY_CLOSE] PDF download requested.")
-        if not daily_report:
-            flash('No hay un cierre diario registrado para hoy. Registre el cierre primero.', 'error')
-            return redirect(url_for('admin.daily_close'))
         
-        report_date = daily_report.date
-        logging.warning(f"[DAILY_CLOSE] PDF generation for date: {report_date}")
-        start_of_report_day_utc, end_of_report_day_utc = get_day_range_utc(report_date)
+        # Use today's date for the PDF if no report is closed yet
+        report_date_for_pdf = daily_report.date if daily_report else today_local
+        logging.warning(f"[DAILY_CLOSE] PDF generation for date: {report_date_for_pdf}")
         
-        ParentProduct = aliased(Product)
-        report_orders_query = (db.session.query(Product.name.label('variant_name'))
-                                 .join(Order, Order.id == OrderItem.order_id)
-                                 .filter(Order.created_at.between(start_of_report_day_utc, end_of_report_day_utc))
-                                 .all())
-        logging.warning(f"[DAILY_CLOSE] Found {len(report_orders_query)} items for the PDF report.")
+        start_pdf_utc, end_pdf_utc = get_day_range_utc(report_date_for_pdf)
 
-        # ... (rest of PDF generation)
+        pdf_orders = Order.query.filter(
+            Order.created_at.between(start_pdf_utc, end_pdf_utc),
+            Order.status.in_(['paid', 'cancelled'])
+        ).order_by(Order.created_at.asc()).all()
+
+        pdf_orders_data = []
+        for order in pdf_orders:
+            items_str = ", ".join([f"{item.quantity}x {item.product.name}" for item in order.items])
+            order_local_time = order.created_at.astimezone(guatemala_tz)
+            pdf_orders_data.append({
+                'id': order.id,
+                'time': order_local_time.strftime('%H:%M:%S'),
+                'total': f"Q{order.total:.2f}",
+                'status': order.status,
+                'items': items_str
+            })
+        
+        # Use calculated total_sales for the PDF, not necessarily from a saved report
+        final_total_sales = db.session.query(db.func.sum(Order.total)).filter(
+            Order.created_at.between(start_pdf_utc, end_pdf_utc),
+            Order.status == 'paid'
+        ).scalar() or 0
+
+        context = {
+            'daily_report': daily_report, # Can be None
+            'total_sales': final_total_sales,
+            'report_date_str': report_date_for_pdf.strftime('%A, %d de %B de %Y'),
+            'orders_data': pdf_orders_data
+        }
+        
+        return generate_daily_report_pdf('admin/daily_close_pdf.html', context)
 
     return render_template('admin/daily_close.html', total_sales=total_sales, daily_report=daily_report, today_date=today_date_str, orders_data=orders_data)
+
