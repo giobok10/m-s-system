@@ -330,6 +330,9 @@ def reports():
     }
     # --- End of report_data section ---
 
+    if request.args.get('download') == 'pdf':
+        return generate_sales_report_pdf(report_data, period)
+
     return render_template('admin/reports.html', report_data=report_data, period=period)
 
 
@@ -437,7 +440,7 @@ def daily_close():
             'orders_data': pdf_orders_data
         }
         
-        return generate_daily_report_pdf('admin/daily_close_pdf.html', context)
+        return generate_daily_report_pdf(context)
 
     return render_template('admin/daily_close.html', total_sales=total_sales, daily_report=daily_report, today_date=today_date_str, orders_data=orders_data)
 

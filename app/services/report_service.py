@@ -8,11 +8,16 @@ from datetime import datetime
 import json
 from zoneinfo import ZoneInfo
 
-def generate_daily_report_pdf(daily_report, orders_data):
+def generate_daily_report_pdf(context):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
     story = []
+
+    daily_report = context.get('daily_report')
+    total_sales = context.get('total_sales')
+    report_date_str = context.get('report_date_str')
+    orders_data = context.get('orders_data')
     
     # Title
     title_style = ParagraphStyle(
@@ -23,16 +28,19 @@ def generate_daily_report_pdf(daily_report, orders_data):
         alignment=1  # Center
     )
     
-    story.append(Paragraph(f"Reporte Diario - {daily_report.date.strftime('%d/%m/%Y')}", title_style))
+    story.append(Paragraph(f"Reporte Diario - {report_date_str}", title_style))
     story.append(Spacer(1, 12))
     
     # Summary table
     summary_data = [
         ['Concepto', 'Monto (Q)'],
-        ['Total de Ventas', f'{daily_report.total_sales:.2f}'],
-        ['Efectivo en Caja', f'{daily_report.cash_in_register:.2f}'],
-        ['Diferencia', f'{daily_report.difference:.2f}']
+        ['Total de Ventas', f'{total_sales:.2f}'],
     ]
+    if daily_report and daily_report.closed_at:
+        summary_data.extend([
+            ['Efectivo en Caja', f'{daily_report.cash_in_register:.2f}'],
+            ['Diferencia', f'{daily_report.difference:.2f}']
+        ])
     
     summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
     summary_table.setStyle(TableStyle([
@@ -51,23 +59,25 @@ def generate_daily_report_pdf(daily_report, orders_data):
     
     # Orders detail
     if orders_data:
-        story.append(Paragraph("Detalle de Ventas", styles['Heading2']))
+        story.append(Paragraph("Detalle de Órdenes", styles['Heading2']))
         story.append(Spacer(1, 12))
         
-        orders_data_table = [['Producto', 'Cantidad', 'Precio Unit.', 'Total']]
-        for item in orders_data:
+        orders_data_table = [['ID', 'Hora', 'Items', 'Total', 'Estado']]
+        for order in orders_data:
             orders_data_table.append([
-                item['product_name'],
-                str(item['quantity']),
-                f"Q{item['unit_price']:.2f}",
-                f"Q{item['total']:.2f}"
+                order['id'],
+                order['time'],
+                Paragraph(order['items'], styles['Normal']),
+                order['total'],
+                order['status']
             ])
         
-        orders_table = Table(orders_data_table, colWidths=[2*inch, 1*inch, 1.5*inch, 1.5*inch])
+        orders_table = Table(orders_data_table, colWidths=[0.5*inch, 1*inch, 3*inch, 1*inch, 1*inch])
         orders_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -86,44 +96,50 @@ def generate_sales_report_pdf(report_data, period_type):
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
     story = []
-    
+
     # Title
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=18,
-        spaceAfter=30,
+        spaceAfter=20,
         alignment=1
     )
-    
     title = f"Reporte de Ventas {period_type.title()}"
     story.append(Paragraph(title, title_style))
+    story.append(Paragraph(report_data['period_label'], ParagraphStyle('centered', alignment=1)))
+    story.append(Spacer(1, 20))
+
+    # Summary
+    summary_style = styles['Normal']
+    story.append(Paragraph(f"<b>Total de Ventas:</b> Q{report_data['total_sales']:.2f}", summary_style))
+    story.append(Paragraph(f"<b>Total de Órdenes:</b> {report_data['total_orders']}", summary_style))
+    story.append(Paragraph(f"<b>Día con más ventas:</b> {report_data['dia_mas_ventas']}", summary_style))
+    story.append(Spacer(1, 20))
+
+    # Top Selling Products
+    story.append(Paragraph("Top 5 Productos Más Vendidos", styles['Heading2']))
     story.append(Spacer(1, 12))
     
-    # Report content
-    for section, data in report_data.items():
-        story.append(Paragraph(section, styles['Heading2']))
-        story.append(Spacer(1, 6))
+    top_products = report_data.get('top_selling_products')
+    if top_products:
+        table_data = [['Producto', 'Cantidad Vendida']]
+        for item in top_products:
+            table_data.append([item.name, str(item.total_quantity)])
         
-        if isinstance(data, list):
-            table_data = [['Producto', 'Cantidad Vendida']]
-            for item in data:
-                table_data.append([item['name'], str(item['quantity'])])
-            
-            table = Table(table_data, colWidths=[3*inch, 2*inch])
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            story.append(table)
-        else:
-            story.append(Paragraph(str(data), styles['Normal']))
-        
-        story.append(Spacer(1, 12))
-    
+        table = Table(table_data, colWidths=[4*inch, 2*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ]))
+        story.append(table)
+    else:
+        story.append(Paragraph("No hay datos de productos vendidos.", styles['Normal']))
+
     doc.build(story)
     buffer.seek(0)
     return buffer
