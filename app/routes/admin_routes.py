@@ -308,13 +308,14 @@ def reports():
         total_sold = int(top_product_query.total_grouped_quantity)
         product_display_name = f"{top_product_query.base_product_name} (Cantidad: {total_sold})"
 
+    grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
-        db.func.date(db.func.timezone('America/Guatemala', Order.created_at)).label('sale_day'), 
+        grouping_expression.label('sale_day'),
         db.func.sum(Order.total).label('total_sales')
     ).filter(
-        Order.status == 'paid', 
+        Order.status == 'paid',
         Order.created_at.between(start_range_utc, end_range_utc)
-    ).group_by('sale_day').order_by(db.desc('total_sales')).first()
+    ).group_by(grouping_expression).order_by(db.desc('total_sales')).first()
 
     dia_mas_ventas_str = "N/A"
     if top_day_query:
@@ -400,7 +401,34 @@ def daily_close():
             flash('No hay un cierre diario registrado para hoy. Registre el cierre primero.', 'error')
             return redirect(url_for('admin.daily_close'))
         
-        pdf_buffer = generate_daily_report_pdf(daily_report, orders_data)
+        # Re-query orders data specifically for the report's date to ensure accuracy
+        report_date = daily_report.date
+        start_of_report_day_utc, end_of_report_day_utc = get_day_range_utc(report_date)
+        
+        ParentProduct = aliased(Product)
+        report_orders_query = (db.session.query(
+            Product.name.label('variant_name'), 
+            ParentProduct.name.label('base_name'), 
+            OrderItem.quantity.label('quantity'), 
+            OrderItem.unit_price.label('unit_price'), 
+            (OrderItem.quantity * OrderItem.unit_price).label('total')
+        ).join(OrderItem, OrderItem.product_id == Product.id)
+         .outerjoin(ParentProduct, Product.parent_id == ParentProduct.id)
+         .join(Order, Order.id == OrderItem.order_id)
+         .filter(
+            Order.created_at.between(start_of_report_day_utc, end_of_report_day_utc), 
+            Order.status == 'paid'
+         ).all())
+
+        report_orders_data = []
+        for row in report_orders_query:
+            product_display_name = row.variant_name
+            if row.base_name:
+                product_display_name = f"{row.base_name} ({row.variant_name})"
+            report_orders_data.append({'product_name': product_display_name, 'quantity': row.quantity, 'unit_price': row.unit_price, 'total': row.total})
+
+        pdf_buffer = generate_daily_report_pdf(daily_report, report_orders_data)
+        
         headers = {
             'Content-Type': 'application/pdf',
             'Content-Disposition': f'inline; filename=reporte_diario_{today_local.strftime("%Y-%m-%d")}.pdf',

@@ -1,3 +1,9 @@
+### 2025-09-05 (Sesión de Tarde)
+
+*   **Corrección Definitiva de Lógica de Fechas**:
+    *   **Solucionado (Reportes):** Se corrigió la consulta que calcula el "día con más ventas" en los reportes semanales/mensuales. Ahora utiliza la función `date_trunc` de la base de datos con la zona horaria correcta, asegurando que las ventas se agrupen en el día que corresponde a Guatemala (UTC-6).
+    *   **Solucionado (PDF de Cierre Diario):** Se corrigió el error que causaba que el PDF del cierre diario mostrara datos del día anterior. La lógica de generación del PDF ahora vuelve a consultar los datos de ventas correspondientes a la fecha del reporte de forma aislada, garantizando que el contenido del PDF sea siempre preciso y autocontenido.
+
 ### 2025-09-05
 
 *   **Corrección de Lógica de Fechas en Reportes (Administrador)**:
