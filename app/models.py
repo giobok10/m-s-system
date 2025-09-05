@@ -2,6 +2,7 @@ from app import db
 from flask_login import UserMixin
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.sql import func
 
 # Association table for the combo recipes
 class ComboItem(db.Model):
@@ -18,7 +19,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     is_active = db.Column(db.Boolean, default=True)
     
     def set_password(self, password):
@@ -33,7 +34,7 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=True)
     category = db.Column(db.String(50), nullable=False)
     stock = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     is_active = db.Column(db.Boolean, default=True)
 
     components = db.relationship('ComboItem', foreign_keys=[ComboItem.combo_product_id], lazy='dynamic', cascade="all, delete-orphan")
@@ -77,8 +78,8 @@ class Order(db.Model):
     customer_phone = db.Column(db.String(20))
     status = db.Column(db.String(20), default='pending')
     total = db.Column(db.Float, default=0.0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now())
     waiter_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     cash_received = db.Column(db.Float)
     change_given = db.Column(db.Float)
@@ -101,4 +102,4 @@ class DailyReport(db.Model):
     total_sales = db.Column(db.Float, default=0.0)
     cash_in_register = db.Column(db.Float)
     difference = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())

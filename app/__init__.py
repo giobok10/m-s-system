@@ -48,7 +48,7 @@ def create_app():
     # Initialize extensions
     db.init_app(app)
     login_manager.init_app(app)
-    socketio.init_app(app, cors_allowed_origins=app.config['CORS_ALLOWED_ORIGINS'])
+    socketio.init_app(app, cors_allowed_origins=app.config['CORS_ALLOWED_ORIGINS'], ping_timeout=20, ping_interval=10)
     moment.init_app(app)
     
     login_manager.login_view = 'auth.login'

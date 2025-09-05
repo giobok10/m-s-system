@@ -1,3 +1,10 @@
+### 2025-09-05
+
+*   **Corrección de Errores Críticos y Mejoras de Estabilidad (Producción)**:
+    *   **Solucionado (Generación de PDF):** Se corrigió un error que causaba que los reportes PDF (como el Cierre Diario) mostraran datos incorrectos o desactualizados en dispositivos móviles. El problema se debía al caché del navegador y se solucionó añadiendo cabeceras `Cache-Control` para forzar la descarga de una versión nueva del reporte cada vez.
+    *   **Solucionado (Manejo de Fechas):** Se corrigió la causa raíz de las fechas y horas incorrectas en la base de datos. Se modificaron los modelos de datos (`User`, `Product`, `Order`, `DailyReport`) para que las columnas de fecha/hora (`created_at`, `updated_at`) utilicen la zona horaria de la base de datos (UTC) de forma nativa. Esto asegura que todas las nuevas órdenes y registros tengan una marca de tiempo precisa y consistente.
+    *   **Mejora (Estabilidad de Conexión):** Se ajustó la configuración de `Socket.IO` para incluir un mecanismo de "heartbeat" (`ping/pong`). Esto reduce significativamente los errores de desconexión (`Bad file descriptor`, `Session is disconnected`) que ocurrían en el entorno de producción de Render, mejorando la estabilidad de las actualizaciones en tiempo real.
+
 ### 2025-09-04 (Sesión de Tarde)
 
 *   **Corrección en Cálculo de Precios de Combos (Mesero)**:

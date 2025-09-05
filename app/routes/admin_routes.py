@@ -328,6 +328,13 @@ def daily_close():
             flash('No hay un cierre diario registrado para hoy. Registre el cierre primero.', 'error')
             return redirect(url_for('admin.daily_close'))
         pdf_buffer = generate_daily_report_pdf(daily_report, orders_data)
-        return pdf_buffer, 200, {'Content-Type': 'application/pdf', 'Content-Disposition': f'inline; filename=reporte_diario_{today.strftime("%Y-%m-%d")}.pdf'}
+        headers = {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': f'inline; filename=reporte_diario_{today.strftime("%Y-%m-%d")}.pdf',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+        return pdf_buffer, 200, headers
     today_date = today.strftime('%d/%m/%Y')
     return render_template('admin/daily_close.html', total_sales=total_sales, daily_report=daily_report, today_date=today_date, orders_data=orders_data)
