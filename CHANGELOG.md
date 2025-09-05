@@ -1,5 +1,10 @@
 ### 2025-09-05
 
+*   **Corrección de Lógica de Fechas en Reportes (Administrador)**:
+    *   **Solucionado:** Se corrigió un error lógico fundamental que causaba que los datos de días anteriores se mostraran en las vistas del día actual (ej. el Cierre Diario del 5 de septiembre mostraba las ventas del 4 de septiembre). 
+    *   **Causa:** La conversión de fechas y zonas horarias directamente en la consulta a la base de datos era inconsistente.
+    *   **Solución:** Se reescribió la lógica de consulta en las rutas del administrador (`dashboard`, `reports`, `daily_close`). Ahora, la aplicación calcula el rango exacto de 24 horas para la fecha local (en zona horaria de Guatemala) y lo convierte a UTC antes de consultar la base de datos. Esto garantiza que las consultas de fechas sean precisas y robustas.
+
 *   **Corrección de Errores Críticos y Mejoras de Estabilidad (Producción)**:
     *   **Solucionado (Generación de PDF):** Se corrigió un error que causaba que los reportes PDF (como el Cierre Diario) mostraran datos incorrectos o desactualizados en dispositivos móviles. El problema se debía al caché del navegador y se solucionó añadiendo cabeceras `Cache-Control` para forzar la descarga de una versión nueva del reporte cada vez.
     *   **Solucionado (Manejo de Fechas):** Se corrigió la causa raíz de las fechas y horas incorrectas en la base de datos. Se modificaron los modelos de datos (`User`, `Product`, `Order`, `DailyReport`) para que las columnas de fecha/hora (`created_at`, `updated_at`) utilicen la zona horaria de la base de datos (UTC) de forma nativa. Esto asegura que todas las nuevas órdenes y registros tengan una marca de tiempo precisa y consistente.
