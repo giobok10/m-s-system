@@ -295,13 +295,17 @@ def reports():
     total_sales_query = db.session.query(db.func.sum(Order.total)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
     total_orders_query = db.session.query(db.func.count(Order.id)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
 
-    top_products_query = db.session.query(
+    top_product_query = db.session.query(
         Product.name,
         db.func.sum(OrderItem.quantity).label('total_quantity')
     ).join(OrderItem, OrderItem.product_id == Product.id)\
      .join(Order, Order.id == OrderItem.order_id)\
      .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc))\
-     .group_by(Product.name).order_by(db.desc('total_quantity')).limit(5).all()
+     .group_by(Product.name).order_by(db.desc('total_quantity')).first()
+
+    producto_mas_vendido_str = "N/A"
+    if top_product_query:
+        producto_mas_vendido_str = f"{top_product_query.name} (Vendidos: {int(top_product_query.total_quantity)})"
 
     grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
@@ -315,7 +319,6 @@ def reports():
 
     dia_mas_ventas_str = "N/A"
     if top_day_query and top_day_query.sale_day:
-        # Convert the UTC date from the database back to local GT time for display
         sale_day_local = top_day_query.sale_day.astimezone(guatemala_tz)
         dia_mas_ventas_str = f"{sale_day_local.strftime('%A, %d de %B')} (Total: Q{top_day_query.total_sales:.2f})"
 
@@ -325,15 +328,23 @@ def reports():
         'period_label': period_label,
         'total_sales': total_sales_query,
         'total_orders': total_orders_query,
-        'top_selling_products': top_products_query,
+        'producto_mas_vendido': producto_mas_vendido_str,
         'dia_mas_ventas': dia_mas_ventas_str
     }
-    # --- End of report_data section ---
 
     if request.args.get('download') == 'pdf':
-        return generate_sales_report_pdf(report_data, period)
+        # For PDF, we need to adjust the data structure slightly for the generator
+        pdf_report_data = {
+            'Periodo': report_data['period_label'],
+            'Total de Ventas': f"Q{report_data['total_sales']:.2f}",
+            'Total de Órdenes': report_data['total_orders'],
+            'Producto Más Vendido': report_data['producto_mas_vendido'],
+            'Día con Más Ventas': report_data['dia_mas_ventas']
+        }
+        return generate_sales_report_pdf(pdf_report_data, period)
 
     return render_template('admin/reports.html', report_data=report_data, period=period)
+
 
 
 @admin_bp.route('/daily_close', methods=['GET', 'POST'])
@@ -369,7 +380,6 @@ def daily_close():
             daily_report.total_sales = total_sales
             daily_report.cash_in_register = cash_in_register
             daily_report.difference = cash_in_register - total_sales
-            daily_report.closed_at = get_current_gt_datetime()
             
             db.session.commit()
             flash('Cierre de caja actualizado exitosamente.', 'success')
