@@ -8,8 +8,16 @@ from werkzeug.security import generate_password_hash
 import bleach
 from functools import wraps
 from sqlalchemy.orm import aliased
+import pytz
 
 admin_bp = Blueprint('admin', __name__)
+
+# Define the timezone for Guatemala
+guatemala_tz = pytz.timezone('America/Guatemala')
+
+def get_current_gt_date():
+    """Returns the current date in Guatemala timezone."""
+    return datetime.now(guatemala_tz).date()
 
 def admin_required(f):
     @wraps(f)
@@ -24,7 +32,7 @@ def admin_required(f):
 @login_required
 @admin_required
 def dashboard():
-    today = date.today()
+    today = get_current_gt_date()
     today_orders = Order.query.filter(
         db.func.date(Order.created_at) == today,
         Order.status == 'paid'
@@ -246,7 +254,7 @@ def add_user():
 @admin_required
 def reports():
     period = request.args.get('period', 'monthly')
-    today = date.today()
+    today = get_current_gt_date()
     if period == 'weekly':
         start_date = today - timedelta(days=today.weekday())
         end_date = start_date + timedelta(days=6)
@@ -283,7 +291,7 @@ def reports():
 @login_required
 @admin_required
 def daily_close():
-    today = date.today()
+    today = get_current_gt_date()
     if request.method == 'POST':
         cash_in_register = request.form.get('cash_in_register', 0)
         try:
