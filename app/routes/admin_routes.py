@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, make_response, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from app.models import User, Product, Order, OrderItem, DailyReport, ComboItem
 from app.services.report_service import generate_daily_report_pdf, generate_sales_report_pdf
@@ -295,17 +295,23 @@ def reports():
     total_sales_query = db.session.query(db.func.sum(Order.total)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
     total_orders_query = db.session.query(db.func.count(Order.id)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
 
+    ParentProduct = aliased(Product)
     top_product_query = db.session.query(
-        Product.name,
+        db.case(
+            (Product.parent_id.isnot(None), ParentProduct.name),
+            else_=Product.name
+        ).label('base_product_name'),
         db.func.sum(OrderItem.quantity).label('total_quantity')
-    ).join(OrderItem, OrderItem.product_id == Product.id)\
-     .join(Order, Order.id == OrderItem.order_id)\
-     .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc))\
-     .group_by(Product.name).order_by(db.desc('total_quantity')).first()
+    ).join(OrderItem, OrderItem.product_id == Product.id)
+     .join(Order, Order.id == OrderItem.order_id)
+     .outerjoin(ParentProduct, Product.parent_id == ParentProduct.id)
+     .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc))
+     .group_by('base_product_name')
+     .order_by(db.desc('total_quantity')).first()
 
     producto_mas_vendido_str = "N/A"
     if top_product_query:
-        producto_mas_vendido_str = f"{top_product_query.name} (Vendidos: {int(top_product_query.total_quantity)})"
+        producto_mas_vendido_str = f"{top_product_query.base_product_name} (Vendidos: {int(top_product_query.total_quantity)})"
 
     grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
@@ -333,6 +339,7 @@ def reports():
     }
 
     if request.args.get('download') == 'pdf':
+        from flask import make_response
         # For PDF, we need to adjust the data structure slightly for the generator
         pdf_report_data = {
             'Periodo': report_data['period_label'],
@@ -341,7 +348,11 @@ def reports():
             'Producto Más Vendido': report_data['producto_mas_vendido'],
             'Día con Más Ventas': report_data['dia_mas_ventas']
         }
-        return generate_sales_report_pdf(pdf_report_data, period)
+        pdf_buffer = generate_sales_report_pdf(pdf_report_data, period)
+        response = make_response(pdf_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = 'inline; filename=reporte_ventas.pdf'
+        return response
 
     return render_template('admin/reports.html', report_data=report_data, period=period)
 
