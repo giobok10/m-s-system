@@ -8,12 +8,12 @@ from werkzeug.security import generate_password_hash
 import bleach
 from functools import wraps
 from sqlalchemy.orm import aliased
-import pytz
+from zoneinfo import ZoneInfo
 
 admin_bp = Blueprint('admin', __name__)
 
 # Define the timezone for Guatemala
-guatemala_tz = pytz.timezone('America/Guatemala')
+guatemala_tz = ZoneInfo('America/Guatemala')
 
 def get_current_gt_date():
     """Returns the current date in Guatemala timezone."""
@@ -34,11 +34,11 @@ def admin_required(f):
 def dashboard():
     today = get_current_gt_date()
     today_orders = Order.query.filter(
-        db.func.date(Order.created_at) == today,
+        db.func.date(db.func.timezone('America/Guatemala', Order.created_at)) == today,
         Order.status == 'paid'
     ).count()
     today_sales = db.session.query(db.func.sum(Order.total)).filter(
-        db.func.date(Order.created_at) == today,
+        db.func.date(db.func.timezone('America/Guatemala', Order.created_at)) == today,
         Order.status == 'paid'
     ).scalar() or 0
     low_stock_products = Product.query.filter(Product.parent_id.is_(None), Product.stock <= 5, Product.is_active == True).all()
@@ -264,7 +264,7 @@ def reports():
         next_month = start_date.replace(day=28) + timedelta(days=4)
         end_date = next_month - timedelta(days=next_month.day)
         period_label = f"Mes de {start_date.strftime('%B de %Y')}"
-    sales_subquery = (db.session.query(OrderItem.product_id, (OrderItem.quantity * Product.stock_consumption).label('total_consumption')).join(Product, Product.id == OrderItem.product_id).join(Order, Order.id == OrderItem.order_id).filter(Order.status == 'paid', db.func.date(Order.created_at).between(start_date, end_date)).subquery())
+    sales_subquery = (db.session.query(OrderItem.product_id, (OrderItem.quantity * Product.stock_consumption).label('total_consumption')).join(Product, Product.id == OrderItem.product_id).join(Order, Order.id == OrderItem.order_id).filter(Order.status == 'paid', db.func.date(db.func.timezone('America/Guatemala', Order.created_at)).between(start_date, end_date)).subquery())
     ParentProduct = aliased(Product)
     grouping_name = db.case((Product.parent_id.isnot(None), ParentProduct.name), else_=Product.name).label('base_product_name')
     top_product_query = (db.session.query(grouping_name, db.func.sum(sales_subquery.c.total_consumption).label('total_grouped_quantity')).join(Product, Product.id == sales_subquery.c.product_id).outerjoin(ParentProduct, Product.parent_id == ParentProduct.id).group_by(grouping_name).order_by(db.desc('total_grouped_quantity')).first())
@@ -272,7 +272,7 @@ def reports():
     if top_product_query:
         total_sold = int(top_product_query.total_grouped_quantity)
         product_display_name = f"{top_product_query.base_product_name} (Cantidad: {total_sold})"
-    top_day_query = db.session.query(db.func.date(Order.created_at).label('sale_day'), db.func.sum(Order.total).label('total_sales')).filter(Order.status == 'paid', db.func.date(Order.created_at).between(start_date, end_date)).group_by('sale_day').order_by(db.desc('total_sales')).first()
+    top_day_query = db.session.query(db.func.date(db.func.timezone('America/Guatemala', Order.created_at)).label('sale_day'), db.func.sum(Order.total).label('total_sales')).filter(Order.status == 'paid', db.func.date(db.func.timezone('America/Guatemala', Order.created_at)).between(start_date, end_date)).group_by('sale_day').order_by(db.desc('total_sales')).first()
     dia_mas_ventas_str = "N/A"
     if top_day_query:
         sale_day = top_day_query[0]
@@ -296,7 +296,7 @@ def daily_close():
         cash_in_register = request.form.get('cash_in_register', 0)
         try:
             cash_in_register = float(cash_in_register)
-            total_sales = db.session.query(db.func.sum(Order.total)).filter(db.func.date(Order.created_at) == today, Order.status == 'paid').scalar() or 0
+            total_sales = db.session.query(db.func.sum(Order.total)).filter(db.func.date(db.func.timezone('America/Guatemala', Order.created_at)) == today, Order.status == 'paid').scalar() or 0
             difference = cash_in_register - total_sales
             daily_report = DailyReport.query.filter_by(date=today).first()
             if daily_report:
@@ -313,10 +313,10 @@ def daily_close():
         except Exception as e:
             flash('Error al registrar cierre.', 'error')
             db.session.rollback()
-    total_sales = db.session.query(db.func.sum(Order.total)).filter(db.func.date(Order.created_at) == today, Order.status == 'paid').scalar() or 0
+    total_sales = db.session.query(db.func.sum(Order.total)).filter(db.func.date(db.func.timezone('America/Guatemala', Order.created_at)) == today, Order.status == 'paid').scalar() or 0
     daily_report = DailyReport.query.filter_by(date=today).first()
     ParentProduct = aliased(Product)
-    orders_query = (db.session.query(Product.name.label('variant_name'), ParentProduct.name.label('base_name'), OrderItem.quantity.label('quantity'), OrderItem.unit_price.label('unit_price'), (OrderItem.quantity * OrderItem.unit_price).label('total')).join(OrderItem, OrderItem.product_id == Product.id).outerjoin(ParentProduct, Product.parent_id == ParentProduct.id).join(Order, Order.id == OrderItem.order_id).filter(db.func.date(Order.created_at) == today, Order.status == 'paid').all())
+    orders_query = (db.session.query(Product.name.label('variant_name'), ParentProduct.name.label('base_name'), OrderItem.quantity.label('quantity'), OrderItem.unit_price.label('unit_price'), (OrderItem.quantity * OrderItem.unit_price).label('total')).join(OrderItem, OrderItem.product_id == Product.id).outerjoin(ParentProduct, Product.parent_id == ParentProduct.id).join(Order, Order.id == OrderItem.order_id).filter(db.func.date(db.func.timezone('America/Guatemala', Order.created_at)) == today, Order.status == 'paid').all())
     orders_data = []
     for row in orders_query:
         product_display_name = row.variant_name
