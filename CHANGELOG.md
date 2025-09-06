@@ -1,5 +1,7 @@
 ### 2025-09-06 (Sesión de Tarde)
 
+*   **Corrección de Errores Críticos y Mejoras de Estabilidad (Producción)**:
+    *   **Solucionado (Caché de PDF en Móviles):** Se corrigió un error crítico donde los navegadores móviles mostraban versiones antiguas (cacheadas) de los reportes en PDF. Se añadieron cabeceras `Cache-Control` a todas las respuestas de PDF para forzar al navegador a descargar siempre la versión más reciente, asegurando la consistencia de los datos en todos los dispositivos.
 *   **Corrección en Lógica de Reportes de Ventas**:
     *   **Solucionado:** Se corrigió la lógica para calcular el "Producto más vendido". La consulta ahora multiplica la cantidad de ítems vendidos por su factor de `stock_consumption`, asegurando que las variantes (ej. "porción de 3") contribuyan correctamente al conteo total de unidades vendidas del producto base.
 *   **Mejora en Vista de Cierre Diario**:
