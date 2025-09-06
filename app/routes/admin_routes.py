@@ -295,19 +295,22 @@ def reports():
     total_sales_query = db.session.query(db.func.sum(Order.total)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
     total_orders_query = db.session.query(db.func.count(Order.id)).filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)).scalar() or 0
 
+    OrderItemProduct = aliased(Product)
     ParentProduct = aliased(Product)
+
     top_product_query = db.session.query(
         db.case(
-            (Product.parent_id.isnot(None), ParentProduct.name),
-            else_=Product.name
+            (OrderItemProduct.parent_id.isnot(None), ParentProduct.name),
+            else_=OrderItemProduct.name
         ).label('base_product_name'),
-        db.func.sum(OrderItem.quantity).label('total_quantity')
-    ).join(OrderItem, OrderItem.product_id == Product.id)
-     .join(Order, Order.id == OrderItem.order_id)
-     .outerjoin(ParentProduct, Product.parent_id == ParentProduct.id)
-     .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc))
-     .group_by('base_product_name')
-     .order_by(db.desc('total_quantity')).first()
+        db.func.sum(OrderItem.quantity * OrderItemProduct.stock_consumption).label('total_quantity')
+    ).select_from(OrderItem) \
+    .join(Order, Order.id == OrderItem.order_id) \
+    .join(OrderItemProduct, OrderItem.product_id == OrderItemProduct.id) \
+    .outerjoin(ParentProduct, OrderItemProduct.parent_id == ParentProduct.id) \
+    .filter(Order.status == 'paid', Order.created_at.between(start_range_utc, end_range_utc)) \
+    .group_by('base_product_name') \
+    .order_by(db.desc('total_quantity')).first()
 
     producto_mas_vendido_str = "N/A"
     if top_product_query:
@@ -325,7 +328,7 @@ def reports():
 
     dia_mas_ventas_str = "N/A"
     if top_day_query and top_day_query.sale_day:
-        sale_day_local = top_day_query.sale_day.astimezone(guatemala_tz)
+        sale_day_local = top_day_query.sale_day # No timezone conversion needed
         dia_mas_ventas_str = f"{sale_day_local.strftime('%A, %d de %B')} (Total: Q{top_day_query.total_sales:.2f})"
 
     logging.warning(f"[REPORTS] Final 'dia_mas_ventas_str': {dia_mas_ventas_str}")
@@ -355,6 +358,7 @@ def reports():
         return response
 
     return render_template('admin/reports.html', report_data=report_data, period=period)
+
 
 
 
@@ -403,17 +407,18 @@ def daily_close():
             db.session.rollback()
 
     # --- Logic for GET request ---
+    # Always calculate the current total sales from orders for display
+    total_sales = db.session.query(db.func.sum(Order.total)).filter(
+        Order.created_at.between(start_of_day_utc, end_of_day_utc),
+        Order.status == 'paid'
+    ).scalar() or 0
+
+    # Fetch the existing daily report mainly for cash_in_register and difference
     daily_report = DailyReport.query.filter_by(date=today_local).first()
     if daily_report:
-        logging.warning(f"[DAILY_CLOSE] Found existing daily_report for {today_local} with total sales: {daily_report.total_sales}")
-        total_sales = daily_report.total_sales
+        logging.warning(f"[DAILY_CLOSE] Found existing daily_report for {today_local}. Current calculated sales: {total_sales}")
     else:
-        # If no report, calculate sales for the day so far
-        logging.warning(f"[DAILY_CLOSE] No daily_report found for {today_local}. Calculating current sales.")
-        total_sales = db.session.query(db.func.sum(Order.total)).filter(
-            Order.created_at.between(start_of_day_utc, end_of_day_utc),
-            Order.status == 'paid'
-        ).scalar() or 0
+        logging.warning(f"[DAILY_CLOSE] No daily_report found for {today_local}. Current calculated sales: {total_sales}")
 
     # Fetch orders for display
     orders = Order.query.filter(
@@ -438,7 +443,14 @@ def daily_close():
 
         pdf_orders_data = []
         for order in pdf_orders:
-            items_str = ", ".join([f"{item.quantity}x {item.product.name}" for item in order.items])
+            item_names = []
+            for item in order.items:
+                product_name = item.product.name
+                if item.product.parent:
+                    product_name = f"{item.product.parent.name} ({product_name})"
+                item_names.append(f"{item.quantity}x {product_name}")
+            
+            items_str = ", ".join(item_names)
             order_local_time = order.created_at.astimezone(guatemala_tz)
             pdf_orders_data.append({
                 'id': order.id,
@@ -461,7 +473,11 @@ def daily_close():
             'orders_data': pdf_orders_data
         }
         
-        return generate_daily_report_pdf(context)
+        pdf_buffer = generate_daily_report_pdf(context)
+        response = make_response(pdf_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = 'inline; filename=cierre_diario.pdf'
+        return response
 
     return render_template('admin/daily_close.html', total_sales=total_sales, daily_report=daily_report, today_date=today_date_str, orders_data=orders_data)
 

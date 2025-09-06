@@ -60,13 +60,26 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for item in orders_data %}
-                        <tr>
-                            <td>{{ item.product_name }}</td>
-                            <td>{{ item.quantity }}</td>
-                            <td>Q{{ "%.2f"|format(item.unit_price) }}</td>
-                            <td>Q{{ "%.2f"|format(item.total) }}</td>
-                        </tr>
+                        {% for data in orders_data %}
+                            <tr class="table-light">
+                                <td colspan="2">
+                                    <strong>Orden #{{ data.order.id }}</strong> 
+                                    <span class="badge bg-{{ 'success' if data.order.status == 'paid' else 'danger' if data.order.status == 'cancelled' else 'secondary' }}">
+                                        {{ data.order.status }}
+                                    </span> 
+                                    (Mesero: {{ data.waiter_name }})
+                                </td>
+                                <td class="text-end"><strong>Total:</strong></td>
+                                <td class="text-end"><strong>Q{{ "%.2f"|format(data.order.total) }}</strong></td>
+                            </tr>
+                            {% for item in data.order['items'] %}
+                            <tr>
+                                <td class="ps-4">- {{ item['product_name'] }}</td>
+                                <td>{{ item['quantity'] }}</td>
+                                <td class="text-end">Q{{ "%.2f"|format(item['unit_price']) }}</td>
+                                <td class="text-end">Q{{ "%.2f"|format(item['quantity'] * item['unit_price']) }}</td>
+                            </tr>
+                            {% endfor %}
                         {% endfor %}
                     </tbody>
                 </table>

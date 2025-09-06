@@ -86,6 +86,34 @@ class Order(db.Model):
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade='all, delete-orphan')
     waiter = db.relationship('User', backref='orders')
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_name': self.customer_name,
+            'customer_phone': self.customer_phone,
+            'status': self.status,
+            'total': self.total,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'cash_received': self.cash_received,
+            'change_given': self.change_given,
+            'items': [item.to_dict() for item in self.items]
+        }
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_name': self.customer_name,
+            'customer_phone': self.customer_phone,
+            'status': self.status,
+            'total': self.total,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'cash_received': self.cash_received,
+            'change_given': self.change_given,
+            'items': [item.to_dict() for item in self.items]
+        }
+
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
@@ -95,6 +123,17 @@ class OrderItem(db.Model):
     extras = db.Column(db.Text)
     notes = db.Column(db.Text)
     product = db.relationship('Product', backref='order_items')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'quantity': self.quantity,
+            'unit_price': self.unit_price,
+            'extras': self.extras,
+            'notes': self.notes
+        }
 
 class DailyReport(db.Model):
     id = db.Column(db.Integer, primary_key=True)

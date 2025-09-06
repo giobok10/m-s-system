@@ -1,4 +1,27 @@
+### 2025-09-06 (Sesión de Tarde)
+
+*   **Corrección en Lógica de Reportes de Ventas**:
+    *   **Solucionado:** Se corrigió la lógica para calcular el "Producto más vendido". La consulta ahora multiplica la cantidad de ítems vendidos por su factor de `stock_consumption`, asegurando que las variantes (ej. "porción de 3") contribuyan correctamente al conteo total de unidades vendidas del producto base.
+*   **Mejora en Vista de Cierre Diario**:
+    *   **Solucionado:** Se corrigió un `TypeError` en la plantilla de Cierre Diario (`daily_close.html`) que causaba un `Internal Server Error`, cambiando el acceso a los datos de la orden para que funcione con diccionarios.
+    *   **Mejora:** Se añadió el estado de la orden (`pagada`, `cancelada`) en el detalle de ventas de la página de Cierre Diario para mayor claridad y para alinear la vista con la información del PDF.
+    *   **Solucionado:** Se corrigió la lógica de carga de la página de Cierre Diario para que el "Total de Ventas del Día" siempre muestre el valor más reciente en tiempo real, en lugar de un valor guardado que podría estar desactualizado.
+    *   **Mejora:** Se ha mejorado la descripción de los productos en el PDF de Cierre Diario para que las variantes muestren su nombre completo (ej. "Tacos de Res (Unidad)") y evitar confusiones.
+*   **Archivo de Consultas SQL**:
+    *   **Añadido:** Se creó el archivo `report_queries.sql` con consultas SQL corregidas y ampliadas para permitir la verificación manual de los datos del sistema directamente en la base de datos.
+
+### 2025-09-06
+
+*   **Corrección de Errores Críticos en Módulo de Administrador**:
+    *   **Solucionado (`AttributeError` en Cierre Diario):** Se corrigió un `Internal Server Error` en la página de Cierre Diario (`/admin/daily_close`) que ocurría porque el objeto `Order` no tenía un método de serialización. Se añadió el método `to_dict()` al modelo `Order` en `app/models.py` para permitir que los datos de la orden se conviertan a un formato compatible con la plantilla.
+    *   **Solucionado (`ProgrammingError` en Reportes):** Se corrigió un `Internal Server Error` en la página de Reportes (`/admin/reports`) causado por una consulta de base de datos ambigua para encontrar el producto más vendido. Se reestructuró la consulta en `app/routes/admin_routes.py` usando `select_from` para ser explícita y eliminar la ambigüedad, asegurando que la consulta se ejecute correctamente en PostgreSQL.
+    *   **Solucionado (Lógica de Fechas en Reportes):** Se corrigió la lógica de formateo de fechas en los reportes de ventas. El sistema ahora muestra correctamente el día con más ventas basándose en la zona horaria local (America/Guatemala), en lugar de mostrar el día anterior debido a una conversión incorrecta de UTC.
+    *   **Solucionado (Descarga de PDF en Cierre Diario):** Se corrigió la descarga del reporte de Cierre Diario en PDF. La ruta ahora devuelve el archivo con la cabecera `Content-Type` correcta (`application/pdf`), permitiendo que el navegador lo renderice como un PDF en lugar de mostrar el código fuente.
+
 ### 2025-09-05 (Sesión de Tarde)
+
+*   **Corrección de Errores en Rutas de Administrador (top_product_query)**:
+    *   **Solucionado:** Se corrigió un `SyntaxError` y `IndentationError` en `app/routes/admin_routes.py` que impedían el inicio de la aplicación. El error se encontraba en la consulta `top_product_query` dentro de la función `reports`, donde un paréntesis cerraba prematuramente la consulta, causando que los métodos encadenados (`.join`, `.filter`, etc.) fueran interpretados como sintaxis inválida. Se eliminó el paréntesis incorrecto para permitir la correcta construcción de la consulta.
 
 *   **Corrección Definitiva de Lógica de Fechas**:
     *   **Solucionado (Reportes):** Se corrigió la consulta que calcula el "día con más ventas" en los reportes semanales/mensuales. Ahora utiliza la función `date_trunc` de la base de datos con la zona horaria correcta, asegurando que las ventas se agrupen en el día que corresponde a Guatemala (UTC-6).
@@ -78,7 +101,7 @@
 
 *   **Gestión de Seguridad**:
     *   **Añadido:** Se creó un script temporal (`set_admin_password.py`) para permitir el cambio de la contraseña del administrador de forma segura a través de la línea de comandos. El script se eliminó después de su uso.
-    *   **Mejora:** Se actualizó la contraseña del administrador a un valor seguro.
+    *   **Mejora:** Se actualizó la contraseña del administrador a un valor más seguro.
 
 ### 2025-09-01
 
@@ -159,6 +182,18 @@
         *   Se corrigieron múltiples `NameError` y `TypeError` causados por descuidos durante el desarrollo (falta de imports de `json`, manejo incorrecto de tipos de datos), dejando el sistema en un estado estable.
 
 ## Historial Completo
+
+### 2025-09-05
+
+*   **Migración Completa a PostgreSQL y Eliminación de SQLite**:
+    *   **Descripción:** Se ha completado la migración del proyecto a PostgreSQL, eliminando todas las referencias y configuraciones relacionadas con SQLite.
+    *   **Cambios:**
+        *   Se eliminó la creación explícita del directorio `instance` en el `Dockerfile` ya que no es necesario para la base de datos.
+        *   Se eliminó el volumen de persistencia para el directorio `instance` en `docker-compose.yml`.
+        *   Se añadió la variable de entorno `DATABASE_URL` al `docker-compose.yml` para que la aplicación se conecte a la base de datos PostgreSQL externa.
+        *   Se añadió la variable de entorno `DEFAULT_ADMIN_PASSWORD` al `docker-compose.yml` para la configuración inicial del administrador.
+        *   Se actualizaron los archivos de documentación (`DOCUMENTACION_TECNICA.md`, `README.md`, `leeme.md`) para reflejar que PostgreSQL es la única base de datos soportada y eliminar cualquier mención a SQLite.
+    *   **Impacto:** El proyecto ahora utiliza exclusivamente PostgreSQL para todas las operaciones de base de datos, tanto en producción como en desarrollo local, garantizando consistencia y persistencia de datos.
 
 ### 2025-08-28
 

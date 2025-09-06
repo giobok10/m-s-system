@@ -34,7 +34,7 @@ Un sistema web integral para la gestión de órdenes, inventario y ventas en un 
 
 - **Backend:** Python 3.11, Flask
 - **Frontend:** HTML, CSS, JavaScript, Bootstrap 5
-- **Base de Datos:** SQLite (por defecto), compatible con PostgreSQL
+- **Base de Datos:** PostgreSQL
 - **Tiempo Real:** Flask-SocketIO, Eventlet
 - **Servidor de Producción:** Gunicorn
 - **Contenedores:** Docker, Docker Compose

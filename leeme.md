@@ -258,7 +258,6 @@ RESUMEN:
 │           └── login.html
 │
 ├── instance/             # Carpeta para archivos que no van al control de versiones
-│   └── restaurant.db     # Aquí se guardará tu base de datos SQLite
 │
 ├── migrations/           # (Opcional) Para migraciones de base de datos con Flask-Migrate
 │
@@ -281,7 +280,7 @@ RESUMEN:
 - **Blueprints (`routes/`)**: Separar las rutas por rol (administrador, mesero, cocinero) hace que el código sea mucho más fácil de mantener a medida que el proyecto crece.
 - **`sockets/`**: Aislar la lógica de WebSockets en su propio directorio mantiene el código de las rutas limpio y se enfoca solo en las interacciones en tiempo real.
 - **`services/`**: Para lógica que no es ni una ruta ni un modelo (como generar un PDF), un directorio de "servicios" es ideal.
-- **`instance/`**: Flask recomienda esta carpeta para archivos de configuración específicos de la instancia o, en este caso, la base de datos SQLite. Debe estar en tu `.gitignore`.
+- **`instance/`**: Flask recomienda esta carpeta para archivos de configuración específicos de la instancia. Debe estar en tu `.gitignore`.
 - **Docker**: El `Dockerfile` te permitirá crear una imagen autocontenida de tu aplicación, y `docker-compose.yml` te facilitará levantar todo el entorno (incluso si en el futuro agregas otro servicio, como una base de datos diferente o un servicio de notificaciones).
 
 Esta estructura te da una base sólida y organizada para empezar a construir tu sistema.

@@ -4,7 +4,7 @@
 
 ### Stack Tecnológico
 - **Backend**: Flask 2.3.3 con Python 3.11
-- **Base de Datos**: SQLite con SQLAlchemy ORM
+- **Base de Datos**: PostgreSQL con SQLAlchemy ORM
 - **Tiempo Real**: Flask-SocketIO para WebSockets
 - **Frontend**: HTML5, CSS3, JavaScript (ES6), Bootstrap 5.1.3
 - **Autenticación**: Flask-Login
@@ -142,3 +142,11 @@ Para producción, es **obligatorio** usar una base de datos externa (como Postgr
 - `SECRET_KEY`: Clave secreta y aleatoria para firmar sesiones.
 - `DEFAULT_ADMIN_PASSWORD`: Contraseña inicial para el usuario `admin`.
 - `DATABASE_URL`: URL de conexión a la base de datos PostgreSQL externa.
+
+## Historial de Cambios
+
+### 2025-09-05 (Sesión de Tarde)
+
+*   **Corrección de Errores en Rutas de Administrador (top_product_query)**:
+    *   **Descripción:** Se corrigió un `SyntaxError` y `IndentationError` en `app/routes/admin_routes.py` que impedían el inicio de la aplicación. El error se encontraba en la consulta `top_product_query` dentro de la función `reports`, donde un paréntesis cerraba prematuramente la consulta, causando que los métodos encadenados (`.join`, `.filter`, etc.) fueran interpretados como sintaxis inválida. Se eliminó el paréntesis incorrecto para permitir la correcta construcción de la consulta.
+    *   **Impacto:** La aplicación ahora puede iniciarse y los reportes de administrador funcionan correctamente sin errores.
