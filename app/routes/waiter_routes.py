@@ -23,18 +23,31 @@ def waiter_required(f):
 @login_required
 @waiter_required
 def dashboard():
+    view_mode = request.args.get('view', 'mine')
     today = date.today()
-    active_orders = Order.query.filter(
+
+    # Base query for active orders
+    active_orders_query = Order.query.filter(
         Order.status.in_(['pending', 'sent_to_kitchen', 'in_preparation', 'ready'])
-    ).order_by(Order.created_at.desc()).all()
-    completed_orders = Order.query.filter(
-        Order.waiter_id == current_user.id,
+    )
+
+    # Base query for completed orders (today only)
+    completed_orders_query = Order.query.filter(
         Order.status == 'paid',
         db.func.date(Order.created_at) == today
-    ).order_by(Order.created_at.desc()).all()
-    return render_template('waiter/dashboard.html', 
+    )
+
+    if view_mode == 'mine':
+        active_orders_query = active_orders_query.filter(Order.waiter_id == current_user.id)
+        completed_orders_query = completed_orders_query.filter(Order.waiter_id == current_user.id)
+
+    active_orders = active_orders_query.order_by(Order.created_at.desc()).all()
+    completed_orders = completed_orders_query.order_by(Order.created_at.desc()).all()
+
+    return render_template('waiter/dashboard.html',
                          active_orders=active_orders,
-                         completed_orders=completed_orders)
+                         completed_orders=completed_orders,
+                         view_mode=view_mode)
 
 @waiter_bp.route('/take_order')
 @login_required

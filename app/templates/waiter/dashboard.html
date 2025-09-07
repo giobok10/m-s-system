@@ -4,28 +4,39 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-clipboard-list"></i> Órdenes Activas</h2>
+    <div class="btn-group" role="group">
+        <a href="{{ url_for('waiter.dashboard', view='mine') }}" class="btn btn-{{ 'primary' if view_mode == 'mine' else 'outline-primary' }}">
+            <i class="fas fa-user"></i> Mis Órdenes
+        </a>
+        <a href="{{ url_for('waiter.dashboard', view='all') }}" class="btn btn-{{ 'primary' if view_mode == 'all' else 'outline-primary' }}">
+            <i class="fas fa-users"></i> Todas las Órdenes
+        </a>
+    </div>
     <a href="{{ url_for('waiter.take_order') }}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Nueva Orden
     </a>
 </div>
 
+<h2 class="mb-4"><i class="fas fa-clipboard-list"></i> Órdenes Activas</h2>
 <div class="row">
     {% for order in active_orders %}
     <div class="col-md-6 col-lg-4 mb-4" id="order-card-{{ order.id }}">
-        <div class="card border-{{ 'primary' if order.status == 'pending' else 'warning' if order.status == 'sent_to_kitchen' else 'info' if order.status == 'in_preparation' else 'success' }}">
+        <div class="card h-100 border-{{ 'primary' if order.status == 'pending' else 'warning' if order.status == 'sent_to_kitchen' else 'info' if order.status == 'in_preparation' else 'success' }}">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h6 class="mb-0">Orden #{{ order.id }}</h6>
                 <span class="badge bg-{{ 'primary' if order.status == 'pending' else 'warning' if order.status == 'sent_to_kitchen' else 'info' if order.status == 'in_preparation' else 'success' }}">
                     {{ order.status.replace('_', ' ').title() }}
                 </span>
             </div>
-            <div class="card-body">
+            <div class="card-body d-flex flex-column">
                 <p><strong>Cliente:</strong> {{ order.customer_name or 'Sin nombre' }}</p>
+                {% if view_mode == 'all' %}
+                <p><strong>Mesero:</strong> {{ order.waiter.full_name }}</p>
+                {% endif %}
                 <p><strong>Total:</strong> Q{{ "%.2f"|format(order.total) }}</p>
                 <p><strong>Hora:</strong> {{ order.created_at|datetime_local(format='%H:%M') }}</p>
                 
-                <div class="d-grid gap-2">
+                <div class="d-grid gap-2 mt-auto">
                     <a href="{{ url_for('waiter.view_order', order_id=order.id) }}" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-eye"></i> Ver Detalles
                     </a>
@@ -40,21 +51,42 @@
         </div>
     </div>
     {% else %}
-    <div class="row">
+    <div class="col-12">
+        <div class="text-center py-4">
+            <i class="fas fa-mug-hot fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">
+                {% if view_mode == 'mine' %}
+                    No tienes órdenes activas
+                {% else %}
+                    No hay órdenes activas en el restaurante
+                {% endif %}
+            </h4>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<hr class="my-5">
+
+<h2 class="mb-4"><i class="fas fa-history"></i> Órdenes Completadas Hoy</h2>
+<div class="row">
     {% for order in completed_orders %}
     <div class="col-md-6 col-lg-4 mb-4">
-        <div class="card border-success">
+        <div class="card border-success h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h6 class="mb-0">Orden #{{ order.id }}</h6>
                 <span class="badge bg-success">
                     <i class="fas fa-check-circle"></i> Pagada
                 </span>
             </div>
-            <div class="card-body">
+            <div class="card-body d-flex flex-column">
                 <p><strong>Cliente:</strong> {{ order.customer_name or 'Sin nombre' }}</p>
+                {% if view_mode == 'all' %}
+                <p><strong>Mesero:</strong> {{ order.waiter.full_name }}</p>
+                {% endif %}
                 <p><strong>Total:</strong> Q{{ "%.2f"|format(order.total) }}</p>
                 <p><strong>Hora:</strong> {{ order.created_at|datetime_local(format='%H:%M') }}</p>
-                <div class="d-grid gap-2">
+                <div class="d-grid gap-2 mt-auto">
                     <a href="{{ url_for('waiter.view_order', order_id=order.id) }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fas fa-eye"></i> Ver Detalles
                     </a>
@@ -64,16 +96,18 @@
     </div>
     {% else %}
     <div class="col-12">
-        <div class="text-center py-5">
-            <i class="fas fa-history fa-3x text-muted mb-3"></i>
-            <h4 class="text-muted">No has completado órdenes hoy</h4>
-            <p class="text-muted">Las órdenes que pages aparecerán aquí.</p>
+        <div class="text-center py-4">
+            <i class="fas fa-concierge-bell fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">
+                {% if view_mode == 'mine' %}
+                    No has completado órdenes hoy
+                {% else %}
+                    No se han completado órdenes hoy
+                {% endif %}
+            </h4>
         </div>
     </div>
     {% endfor %}
 </div>
-    {% endfor %}
-</div>
+
 {% endblock %}
-
-

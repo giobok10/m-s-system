@@ -100,20 +100,6 @@ class Order(db.Model):
             'items': [item.to_dict() for item in self.items]
         }
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'customer_name': self.customer_name,
-            'customer_phone': self.customer_phone,
-            'status': self.status,
-            'total': self.total,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'cash_received': self.cash_received,
-            'change_given': self.change_given,
-            'items': [item.to_dict() for item in self.items]
-        }
-
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)

@@ -64,7 +64,14 @@ function showNotification(message, type = "info") {
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
   document.body.appendChild(alertContainer);
+  playNotificationSound(); // Play sound on notification
   setTimeout(() => new bootstrap.Alert(alertContainer).close(), 5000);
+}
+
+// Function to play notification sound
+function playNotificationSound() {
+  const audio = new Audio('/static/notification.mp3');
+  audio.play().catch(error => console.error("Audio playback failed:", error));
 }
 
 
