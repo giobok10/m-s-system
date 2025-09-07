@@ -144,11 +144,19 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
 <script>
 let orderItems = [];
 let currentProductData = null;
 let currentVariant = null;
+
+// Store all products passed from backend in a map for easy lookup
+const allProducts = new Map();
+{% for product in products %}
+    allProducts.set({{ product.id }}, JSON.parse('{{ product.to_dict()|tojson|safe }}'));
+{% endfor %}
+{% for extra in extras %}
+    allProducts.set({{ extra.id }}, JSON.parse('{{ extra.to_dict()|tojson|safe }}'));
+{% endfor %}
 
 const quantityModalEl = document.getElementById('quantityModal');
 const quantityModal = new bootstrap.Modal(quantityModalEl);
@@ -181,6 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('addToOrderBtn').addEventListener('click', addToOrder);
     document.getElementById('orderForm').addEventListener('submit', submitOrder);
+    updateAllCardStocks(); // Initial stock check
 });
 
 function openVariantModal(product) {
@@ -221,49 +230,8 @@ function openQuantityModal(product, variant = null) {
     document.getElementById('notes').value = '';
     document.querySelectorAll('.extra-quantity-input').forEach(input => input.value = 0);
 
-    updateStockInfo();
+    updateModalStockView();
     quantityModal.show();
-}
-
-function updateStockInfo() {
-    const itemBeingAdded = currentVariant || currentProductData;
-    const isCombo = currentProductData.category === 'Combo';
-
-    if (isCombo) {
-        document.getElementById('availableStock').textContent = 'N/A (se valida al crear)';
-        document.getElementById('quantity').removeAttribute('max');
-        document.getElementById('addToOrderBtn').disabled = false;
-    } else {
-        const stockToCheck = currentVariant ? currentProductData.stock : itemBeingAdded.stock;
-        const consumptionRate = currentVariant ? currentVariant.stock_consumption : 1;
-        const baseProductId = currentVariant ? currentProductData.id : null;
-        const quantityInCart = getQuantityInCart(itemBeingAdded.id, baseProductId);
-        const availableStockUnits = Math.floor((stockToCheck - quantityInCart) / consumptionRate);
-        
-        document.getElementById('availableStock').textContent = availableStockUnits;
-        const quantityInput = document.getElementById('quantity');
-        quantityInput.max = availableStockUnits > 0 ? availableStockUnits : 0;
-        quantityInput.disabled = availableStockUnits <= 0;
-        document.getElementById('addToOrderBtn').disabled = availableStockUnits <= 0;
-    }
-
-    // Update extras stock
-    document.querySelectorAll('.extra-quantity-input').forEach(input => {
-        const extraId = input.dataset.extraId;
-        const extraStock = parseInt(input.dataset.extraStock);
-        const extraQuantityInCart = getExtraQuantityInCart(extraId);
-        const availableExtraStock = extraStock - extraQuantityInCart;
-        const stockLabel = input.previousElementSibling.querySelector('small');
-        
-        input.max = availableExtraStock;
-        if (availableExtraStock <= 0) {
-            stockLabel.textContent = ' (Agotado)';
-            input.disabled = true;
-        } else {
-            stockLabel.textContent = ` (Stock: ${availableExtraStock})`;
-            input.disabled = false;
-        }
-    });
 }
 
 function addToOrder() {
@@ -295,7 +263,7 @@ function addToOrder() {
         notes: notes,
         total: itemPrice * quantity,
         base_product_id: currentVariant ? currentProductData.id : null,
-        stock_consumption: currentVariant ? currentVariant.stock_consumption : 1,
+        stock_consumption: itemBeingAdded.stock_consumption || 1,
         displayExtras: extraNames.join(', '),
         components: currentProductData.category === 'Combo' ? currentProductData.components : []
     };
@@ -303,48 +271,6 @@ function addToOrder() {
     orderItems.push(item);
     updateOrderDisplay();
     quantityModal.hide();
-}
-
-function getQuantityInCart(productId, baseProductId = null) {
-    let totalConsumption = 0;
-    orderItems.forEach(item => {
-        // Case 1: Direct match (item is a variant of the base product being checked)
-        if (baseProductId && item.base_product_id === baseProductId) {
-            totalConsumption += item.quantity * item.stock_consumption;
-        }
-
-        // Case 2: Direct match (item is a simple product being checked)
-        if (productId && !baseProductId && String(item.product_id) === String(productId)) {
-            totalConsumption += item.quantity;
-        }
-
-        // Case 3: Indirect match (item is a combo that contains the product being checked)
-        if (item.components && item.components.length > 0) {
-            item.components.forEach(component => {
-                // Check if the component's product ID matches the base product ID we are looking for
-                if (baseProductId && String(component.component_product_id) === String(baseProductId)) {
-                    totalConsumption += component.quantity * item.quantity;
-                }
-                // Check if the component's product ID matches the simple product ID we are looking for
-                if (productId && !baseProductId && String(component.component_product_id) === String(productId)) {
-                    totalConsumption += component.quantity * item.quantity;
-                }
-            });
-        }
-    });
-    return totalConsumption;
-}
-
-function getExtraQuantityInCart(extraId) {
-    let total = 0;
-    orderItems.forEach(item => {
-        item.extras.forEach(extra => {
-            if (String(extra.id) === String(extraId)) {
-                total += extra.quantity * item.quantity;
-            }
-        });
-    });
-    return total;
 }
 
 function updateOrderDisplay() {
@@ -387,48 +313,6 @@ function removeItem(index) {
     updateOrderDisplay();
 }
 
-function updateAllCardStocks() {
-    document.querySelectorAll('.product-card').forEach(card => {
-        const product = JSON.parse(card.dataset.product);
-        const stockElement = card.querySelector(`[data-stock-id='${product.id}']`);
-        const addButton = card.querySelector('.add-product-btn');
-
-        if (!stockElement) return; // Skip combos or items without stock display
-
-        let stockInCart = 0;
-        if (product.category === 'Principal') {
-            // For base products, sum consumption of all its variants in the cart
-            stockInCart = getQuantityInCart(null, product.id);
-        } else {
-            // For simple products (Bebida)
-            stockInCart = getQuantityInCart(product.id);
-        }
-
-        const remainingStock = product.stock - stockInCart;
-        
-        if (product.category === 'Principal') {
-            stockElement.textContent = `Stock Base: ${remainingStock}`;
-        } else {
-            stockElement.textContent = `Stock: ${remainingStock}`;
-        }
-
-        // Update color based on remaining stock
-        stockElement.classList.remove('text-success', 'text-warning', 'text-danger');
-        if (remainingStock > 5) {
-            stockElement.classList.add('text-success');
-        } else if (remainingStock > 0) {
-            stockElement.classList.add('text-warning');
-        } else {
-            stockElement.classList.add('text-danger');
-        }
-
-        // Disable button if no stock left
-        if (addButton) {
-            addButton.disabled = remainingStock <= 0;
-        }
-    });
-}
-
 function submitOrder(e) {
     if (orderItems.length === 0) {
         e.preventDefault();
@@ -451,5 +335,139 @@ function submitOrder(e) {
         form.appendChild(input);
     });
 }
+
+// --- STOCK CALCULATION LOGIC ---
+
+function calculateStockConsumption() {
+    const consumption = {}; // { base_product_id: consumed_quantity }
+
+    orderItems.forEach(item => {
+        // Case 1: Item is a Variant
+        if (item.base_product_id) {
+            consumption[item.base_product_id] = (consumption[item.base_product_id] || 0) + (item.quantity * item.stock_consumption);
+        }
+        // Case 2: Item is a Combo
+        else if (item.components && item.components.length > 0) {
+            item.components.forEach(c => {
+                const componentProduct = c.component;
+                const baseProductId = componentProduct.parent_id || componentProduct.id;
+                const consumptionRate = componentProduct.stock_consumption || 1;
+                consumption[baseProductId] = (consumption[baseProductId] || 0) + (c.quantity * item.quantity * consumptionRate);
+            });
+        }
+        // Case 3: Item is a simple product (e.g., Bebida)
+        else {
+            consumption[item.product_id] = (consumption[item.product_id] || 0) + item.quantity;
+        }
+
+        // Case 4: Handle Extras for the item
+        if (item.extras && item.extras.length > 0) {
+            item.extras.forEach(extra => {
+                const extraProduct = allProducts.get(parseInt(extra.id));
+                if (extraProduct) {
+                    const baseProductId = extraProduct.parent_id || extraProduct.id;
+                    consumption[baseProductId] = (consumption[baseProductId] || 0) + (extra.quantity * item.quantity);
+                }
+            });
+        }
+    });
+    return consumption;
+}
+
+function updateAllCardStocks() {
+    const consumption = calculateStockConsumption();
+
+    document.querySelectorAll('.product-card').forEach(card => {
+        const product = JSON.parse(card.dataset.product);
+        const stockElement = card.querySelector(`[data-stock-id='${product.id}']`);
+        const addButton = card.querySelector('.add-product-btn');
+
+        if (!stockElement) { // It's a combo, check its components
+            let canBeAdded = true;
+            if (product.components) {
+                for (const c of product.components) {
+                    const componentProduct = c.component;
+                    const baseProductId = componentProduct.parent_id || componentProduct.id;
+                    const baseProduct = allProducts.get(baseProductId);
+                    const consumed = consumption[baseProductId] || 0;
+                    if (baseProduct.stock - consumed < c.quantity * (componentProduct.stock_consumption || 1)) {
+                        canBeAdded = false;
+                        break;
+                    }
+                }
+            }
+            addButton.disabled = !canBeAdded;
+            return;
+        }
+
+        const baseProduct = product.parent_id ? allProducts.get(product.parent_id) : product;
+        const consumed = consumption[baseProduct.id] || 0;
+        const remainingStock = baseProduct.stock - consumed;
+        
+        const stockText = product.category === 'Principal' ? `Stock Base: ${remainingStock}` : `Stock: ${remainingStock}`;
+        stockElement.textContent = stockText;
+
+        stockElement.classList.remove('text-success', 'text-warning', 'text-danger');
+        if (remainingStock > 5) stockElement.classList.add('text-success');
+        else if (remainingStock > 0) stockElement.classList.add('text-warning');
+        else stockElement.classList.add('text-danger');
+
+        if (addButton) {
+            addButton.disabled = remainingStock <= 0;
+        }
+    });
+}
+
+function updateModalStockView() {
+    const consumption = calculateStockConsumption();
+    const itemBeingAdded = currentVariant || currentProductData;
+    const quantityInput = document.getElementById('quantity');
+    const addToOrderBtn = document.getElementById('addToOrderBtn');
+
+    let maxQuantity = Infinity;
+
+    if (itemBeingAdded.category === 'Combo') {
+        itemBeingAdded.components.forEach(c => {
+            const componentProduct = c.component;
+            const baseProductId = componentProduct.parent_id || componentProduct.id;
+            const baseProduct = allProducts.get(baseProductId);
+            const consumed = consumption[baseProductId] || 0;
+            const remaining = baseProduct.stock - consumed;
+            const maxForThis = Math.floor(remaining / (c.quantity * (componentProduct.stock_consumption || 1)));
+            if (maxForThis < maxQuantity) maxQuantity = maxForThis;
+        });
+    } else {
+        const baseProductId = itemBeingAdded.parent_id || itemBeingAdded.id;
+        const baseProduct = allProducts.get(baseProductId);
+        const consumed = consumption[baseProductId] || 0;
+        const remaining = baseProduct.stock - consumed;
+        const consumptionRate = itemBeingAdded.stock_consumption || 1;
+        maxQuantity = Math.floor(remaining / consumptionRate);
+    }
+
+    document.getElementById('availableStock').textContent = maxQuantity;
+    quantityInput.max = maxQuantity > 0 ? maxQuantity : 0;
+    quantityInput.disabled = maxQuantity <= 0;
+    addToOrderBtn.disabled = maxQuantity <= 0;
+
+    // Update extras stock in modal
+    document.querySelectorAll('.extra-quantity-input').forEach(input => {
+        const extraId = parseInt(input.dataset.extraId);
+        const extraProduct = allProducts.get(extraId);
+        const consumed = consumption[extraId] || 0;
+        const available = extraProduct.stock - consumed;
+        const stockLabel = input.previousElementSibling.querySelector('small');
+        
+        input.max = available;
+        if (available <= 0) {
+            stockLabel.textContent = ' (Agotado)';
+            input.disabled = true;
+        } else {
+            stockLabel.textContent = ` (Stock: ${available})`;
+            input.disabled = false;
+        }
+    });
+}
+
 </script>
 {% endblock %}

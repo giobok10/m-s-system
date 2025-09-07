@@ -67,7 +67,10 @@ class Product(db.Model):
         }
         if self.category == 'Combo':
             data['components'] = [
-                {'component_product_id': item.component_product_id, 'quantity': item.quantity}
+                {
+                    'component': item.component.to_dict(),
+                    'quantity': item.quantity
+                }
                 for item in self.components
             ]
         return data
