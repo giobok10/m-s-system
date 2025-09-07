@@ -1,3 +1,9 @@
+### 2025-09-07
+
+*   **Corrección Crítica de WebSockets y Comunicación en Tiempo Real**:
+    *   **Solucionado (Error de Conexión en Producción):** Se corrigió un error crítico que impedía por completo la comunicación por WebSockets en el entorno de producción (Render). La configuración de CORS (`CORS_ALLOWED_ORIGINS`) en `app/config.py` no incluía la URL de la aplicación desplegada, causando que el servidor rechazara todas las conexiones de socket. La configuración ahora incluye por defecto la URL de Render y la de localhost, y maneja correctamente una lista de orígenes.
+    *   **Solucionado (Eventos de Actualización no se Enviaban):** Se corrigió un error en `app/routes/cook_routes.py` que causaba que las actualizaciones de estado de las órdenes (ej. "En preparación", "Listo") nunca se notificaran a los meseros. El evento se intentaba emitir a una lista de salas (`room=['waiters', 'kitchen']`), una sintaxis no soportada. Se corrigió para emitir el evento a cada sala de forma individual, restaurando la funcionalidad de actualización en tiempo real.
+
 ### 2025-09-06 (Sesión de Tarde)
 
 *   **Corrección de Errores Críticos y Mejoras de Estabilidad (Producción)**:

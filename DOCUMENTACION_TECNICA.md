@@ -23,7 +23,7 @@
 │   ├── services/                # Lógica de negocio
 │   ├── static/                  # Archivos estáticos
 │   └── templates/               # Plantillas HTML
-├── instance/                    # Base de datos SQLite
+├── instance/                    # Directorio de instancia de Flask (si es necesario)
 ├── Dockerfile                   # Imagen Docker
 ├── docker-compose.yml           # Orquestación
 └── requirements.txt             # Dependencias Python
@@ -110,7 +110,7 @@
 ## API WebSocket
 
 - **`new_order`**: Notifica a la cocina de una nueva orden.
-- **`order_status_update`**: Notifica a meseros de cambios de estado.
+- **`order_status_update`**: Notifica a meseros y cocineros de cambios de estado de una orden (ej. 'en preparación', 'listo').
 - **`stock_update`**: Notifica a todos de cambios en el stock.
 
 ## Flujo de Datos
@@ -142,6 +142,7 @@ Para producción, es **obligatorio** usar una base de datos externa (como Postgr
 - `SECRET_KEY`: Clave secreta y aleatoria para firmar sesiones.
 - `DEFAULT_ADMIN_PASSWORD`: Contraseña inicial para el usuario `admin`.
 - `DATABASE_URL`: URL de conexión a la base de datos PostgreSQL externa.
+- `CORS_ALLOWED_ORIGINS`: Lista de URLs permitidas para conectarse al servidor de WebSockets, separadas por comas (ej. `https://mi-app.onrender.com,http://localhost:5000`).
 
 ## Historial de Cambios
 

@@ -42,7 +42,12 @@ def start_preparation(order_id):
         'order_id': order.id,
         'status': 'in_preparation',
         'customer_name': order.customer_name
-    }, room=['waiters', 'kitchen'])
+    }, room='waiters')
+    socketio.emit('order_status_update', {
+        'order_id': order.id,
+        'status': 'in_preparation',
+        'customer_name': order.customer_name
+    }, room='kitchen')
     
     return jsonify({'success': True, 'message': 'Orden marcada como en preparación.'})
 
@@ -63,7 +68,12 @@ def mark_ready(order_id):
         'order_id': order.id,
         'status': 'ready',
         'customer_name': order.customer_name
-    }, room=['waiters', 'kitchen'])
+    }, room='waiters')
+    socketio.emit('order_status_update', {
+        'order_id': order.id,
+        'status': 'ready',
+        'customer_name': order.customer_name
+    }, room='kitchen')
     
     return jsonify({'success': True, 'message': 'Orden marcada como lista.'})
 

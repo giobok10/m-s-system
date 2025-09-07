@@ -11,5 +11,6 @@ class Config:
     DEFAULT_ADMIN_PASSWORD = os.environ.get('DEFAULT_ADMIN_PASSWORD')
     
     # Configuracion de CORS
-    CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:5000')
+    _origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:5000,http://127.0.0.1:5000,https://m-s-system.onrender.com')
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _origins_str.split(',')]
 
