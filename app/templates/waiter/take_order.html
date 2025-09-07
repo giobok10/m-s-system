@@ -18,7 +18,7 @@
                     <div class="col-md-6 mb-2">
                         <div class="card product-card h-100" 
                              data-product='{{ product.to_dict()|tojson|safe }}' 
-                             style="cursor: pointer;">
+                             style="cursor: pointer;" tabindex="-1">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
@@ -149,8 +149,8 @@
 let orderItems = [];
 let currentProductData = null;
 let currentVariant = null;
+let lastClickedCard = null;
 
-// Store all products passed from backend in a map for easy lookup
 const allProducts = new Map();
 {% for product in products %}
     allProducts.set({{ product.id }}, JSON.parse('{{ product.to_dict()|tojson|safe }}'));
@@ -161,24 +161,23 @@ const allProducts = new Map();
 
 const quantityModalEl = document.getElementById('quantityModal');
 const quantityModal = new bootstrap.Modal(quantityModalEl);
-const variantModal = new bootstrap.Modal(document.getElementById('variantModal'));
+const variantModalEl = document.getElementById('variantModal');
+const variantModal = new bootstrap.Modal(variantModalEl);
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Accessibility fix for modal focus
-    let modalTriggerElement = null;
-    quantityModalEl.addEventListener('show.bs.modal', function (event) {
-        if (event.relatedTarget) {
-            modalTriggerElement = event.relatedTarget;
-        }
-    });
-    quantityModalEl.addEventListener('hidden.bs.modal', function () {
-        if (modalTriggerElement) {
-            modalTriggerElement.focus();
-        }
+    // Accessibility: Manage focus when modals close
+    [quantityModalEl, variantModalEl].forEach(modalEl => {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            if (lastClickedCard) {
+                lastClickedCard.focus();
+                lastClickedCard = null;
+            }
+        });
     });
 
     document.querySelectorAll('.product-card').forEach(card => {
         card.addEventListener('click', function() {
+            lastClickedCard = this;
             const product = JSON.parse(this.dataset.product);
             if (product.category === 'Principal') {
                 openVariantModal(product);
@@ -190,7 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('addToOrderBtn').addEventListener('click', addToOrder);
     document.getElementById('orderForm').addEventListener('submit', submitOrder);
-    updateAllCardStocks(); // Initial stock check
+    updateAllCardStocks();
 });
 
 function openVariantModal(product) {
@@ -202,14 +201,13 @@ function openVariantModal(product) {
     body.innerHTML = '';
 
     if (!variants || variants.length === 0) {
-        body.innerHTML = '<p class="text-muted">Este producto no tiene variantes definidas y no se puede vender directamente.</p>';
+        body.innerHTML = '<p class="text-muted">Este producto no tiene variantes definidas.</p>';
     } else {
         variants.forEach(variant => {
             const btn = document.createElement('button');
             btn.className = 'btn btn-outline-primary w-100 mb-2';
             btn.textContent = `${variant.name} - Q${variant.price.toFixed(2)}`;
             btn.onclick = () => {
-                currentVariant = variant;
                 variantModal.hide();
                 openQuantityModal(product, variant);
             };
@@ -226,7 +224,6 @@ function openQuantityModal(product, variant = null) {
     const itemBeingAdded = variant || product;
     document.getElementById('quantityModalTitle').textContent = 'Agregar ' + itemBeingAdded.name;
     
-    // Reset modal state
     document.getElementById('quantity').value = 1;
     document.getElementById('notes').value = '';
     document.querySelectorAll('.extra-quantity-input').forEach(input => input.value = 0);
@@ -236,8 +233,34 @@ function openQuantityModal(product, variant = null) {
 }
 
 function addToOrder() {
-    const quantity = parseInt(document.getElementById('quantity').value);
+    const consumption = calculateStockConsumption();
+    const quantityInput = document.getElementById('quantity');
+    const quantity = parseInt(quantityInput.value);
+
     if (isNaN(quantity) || quantity <= 0) return;
+
+    // --- VALIDATION --- 
+    const maxAllowed = parseInt(quantityInput.max);
+    if (quantity > maxAllowed) {
+        alert(`No hay suficiente stock. Solo puedes agregar un máximo de ${maxAllowed}.`);
+        return;
+    }
+
+    let extrasAreValid = true;
+    document.querySelectorAll('.extra-quantity-input').forEach(input => {
+        const extraQuantity = parseInt(input.value);
+        if (extraQuantity > 0) {
+            const maxExtra = parseInt(input.max);
+            if (extraQuantity > maxExtra) {
+                const extraName = input.dataset.extraName;
+                alert(`No hay suficiente stock para el extra "${extraName}". Solo puedes agregar ${maxExtra}.`);
+                extrasAreValid = false;
+            }
+        }
+    });
+
+    if (!extrasAreValid) return;
+    // --- END VALIDATION ---
 
     const itemBeingAdded = currentVariant || currentProductData;
     const notes = document.getElementById('notes').value;
@@ -340,34 +363,27 @@ function submitOrder(e) {
 // --- STOCK CALCULATION LOGIC ---
 
 function calculateStockConsumption() {
-    const consumption = {}; // { base_product_id: consumed_quantity }
+    const consumption = {};
 
     orderItems.forEach(item => {
-        // Case 1: Item is a Variant
         if (item.base_product_id) {
             consumption[item.base_product_id] = (consumption[item.base_product_id] || 0) + (item.quantity * item.stock_consumption);
-        }
-        // Case 2: Item is a Combo
-        else if (item.components && item.components.length > 0) {
+        } else if (item.components && item.components.length > 0) {
             item.components.forEach(c => {
-                const componentProduct = c.component;
-                const baseProductId = componentProduct.parent_id || componentProduct.id;
-                const consumptionRate = componentProduct.stock_consumption || 1;
-                consumption[baseProductId] = (consumption[baseProductId] || 0) + (c.quantity * item.quantity * consumptionRate);
+                const comp = c.component;
+                const baseId = comp.parent_id || comp.id;
+                consumption[baseId] = (consumption[baseId] || 0) + (c.quantity * item.quantity * (comp.stock_consumption || 1));
             });
-        }
-        // Case 3: Item is a simple product (e.g., Bebida)
-        else {
+        } else {
             consumption[item.product_id] = (consumption[item.product_id] || 0) + item.quantity;
         }
 
-        // Case 4: Handle Extras for the item
         if (item.extras && item.extras.length > 0) {
             item.extras.forEach(extra => {
-                const extraProduct = allProducts.get(parseInt(extra.id));
-                if (extraProduct) {
-                    const baseProductId = extraProduct.parent_id || extraProduct.id;
-                    consumption[baseProductId] = (consumption[baseProductId] || 0) + (extra.quantity * item.quantity);
+                const extraProd = allProducts.get(parseInt(extra.id));
+                if (extraProd) {
+                    const baseId = extraProd.parent_id || extraProd.id;
+                    consumption[baseId] = (consumption[baseId] || 0) + (extra.quantity * item.quantity);
                 }
             });
         }
@@ -383,38 +399,34 @@ function updateAllCardStocks() {
         const stockElement = card.querySelector(`[data-stock-id='${product.id}']`);
         const addButton = card.querySelector('.add-product-btn');
 
-        if (!stockElement) { // It's a combo, check its components
+        if (product.category === 'Combo') {
             let canBeAdded = true;
-            if (product.components) {
-                for (const c of product.components) {
-                    const componentProduct = c.component;
-                    const baseProductId = componentProduct.parent_id || componentProduct.id;
-                    const baseProduct = allProducts.get(baseProductId);
-                    const consumed = consumption[baseProductId] || 0;
-                    if (baseProduct.stock - consumed < c.quantity * (componentProduct.stock_consumption || 1)) {
-                        canBeAdded = false;
-                        break;
-                    }
+            for (const c of product.components) {
+                const comp = c.component;
+                const baseId = comp.parent_id || comp.id;
+                const baseProd = allProducts.get(baseId);
+                const consumed = consumption[baseId] || 0;
+                if (baseProd.stock - consumed < c.quantity * (comp.stock_consumption || 1)) {
+                    canBeAdded = false;
+                    break;
                 }
             }
             addButton.disabled = !canBeAdded;
-            return;
-        }
-
-        const baseProduct = product.parent_id ? allProducts.get(product.parent_id) : product;
-        const consumed = consumption[baseProduct.id] || 0;
-        const remainingStock = baseProduct.stock - consumed;
-        
-        const stockText = product.category === 'Principal' ? `Stock Base: ${remainingStock}` : `Stock: ${remainingStock}`;
-        stockElement.textContent = stockText;
-
-        stockElement.classList.remove('text-success', 'text-warning', 'text-danger');
-        if (remainingStock > 5) stockElement.classList.add('text-success');
-        else if (remainingStock > 0) stockElement.classList.add('text-warning');
-        else stockElement.classList.add('text-danger');
-
-        if (addButton) {
-            addButton.disabled = remainingStock <= 0;
+        } else {
+            const baseId = product.parent_id || product.id;
+            const baseProd = allProducts.get(baseId);
+            const consumed = consumption[baseId] || 0;
+            const remainingStock = baseProd.stock - consumed;
+            
+            if(stockElement) {
+                stockElement.textContent = product.category === 'Principal' ? `Stock Base: ${remainingStock}` : `Stock: ${remainingStock}`;
+                stockElement.classList.toggle('text-success', remainingStock > 5);
+                stockElement.classList.toggle('text-warning', remainingStock > 0 && remainingStock <= 5);
+                stockElement.classList.toggle('text-danger', remainingStock <= 0);
+            }
+            if (addButton) {
+                addButton.disabled = remainingStock <= 0;
+            }
         }
     });
 }
@@ -425,25 +437,26 @@ function updateModalStockView() {
     const quantityInput = document.getElementById('quantity');
     const addToOrderBtn = document.getElementById('addToOrderBtn');
 
-    let maxQuantity = Infinity;
+    let maxQuantity = 0;
 
     if (itemBeingAdded.category === 'Combo') {
+        let maxForCombo = Infinity;
         itemBeingAdded.components.forEach(c => {
-            const componentProduct = c.component;
-            const baseProductId = componentProduct.parent_id || componentProduct.id;
-            const baseProduct = allProducts.get(baseProductId);
-            const consumed = consumption[baseProductId] || 0;
-            const remaining = baseProduct.stock - consumed;
-            const maxForThis = Math.floor(remaining / (c.quantity * (componentProduct.stock_consumption || 1)));
-            if (maxForThis < maxQuantity) maxQuantity = maxForThis;
+            const comp = c.component;
+            const baseId = comp.parent_id || comp.id;
+            const baseProd = allProducts.get(baseId);
+            const consumed = consumption[baseId] || 0;
+            const remaining = baseProd.stock - consumed;
+            const maxForThis = Math.floor(remaining / (c.quantity * (comp.stock_consumption || 1)));
+            if (maxForThis < maxForCombo) maxForCombo = maxForThis;
         });
+        maxQuantity = maxForCombo;
     } else {
-        const baseProductId = itemBeingAdded.parent_id || itemBeingAdded.id;
-        const baseProduct = allProducts.get(baseProductId);
-        const consumed = consumption[baseProductId] || 0;
-        const remaining = baseProduct.stock - consumed;
-        const consumptionRate = itemBeingAdded.stock_consumption || 1;
-        maxQuantity = Math.floor(remaining / consumptionRate);
+        const baseId = itemBeingAdded.parent_id || itemBeingAdded.id;
+        const baseProd = allProducts.get(baseId);
+        const consumed = consumption[baseId] || 0;
+        const remaining = baseProd.stock - consumed;
+        maxQuantity = Math.floor(remaining / (itemBeingAdded.stock_consumption || 1));
     }
 
     document.getElementById('availableStock').textContent = maxQuantity;
@@ -451,15 +464,14 @@ function updateModalStockView() {
     quantityInput.disabled = maxQuantity <= 0;
     addToOrderBtn.disabled = maxQuantity <= 0;
 
-    // Update extras stock in modal
     document.querySelectorAll('.extra-quantity-input').forEach(input => {
         const extraId = parseInt(input.dataset.extraId);
-        const extraProduct = allProducts.get(extraId);
+        const extraProd = allProducts.get(extraId);
         const consumed = consumption[extraId] || 0;
-        const available = extraProduct.stock - consumed;
+        const available = extraProd.stock - consumed;
         const stockLabel = input.previousElementSibling.querySelector('small');
         
-        input.max = available;
+        input.max = available > 0 ? available : 0;
         if (available <= 0) {
             stockLabel.textContent = ' (Agotado)';
             input.disabled = true;
