@@ -70,7 +70,7 @@ function showNotification(message, type = "info") {
 
 // --- WebSocket Connection and Event Handlers ---
 if (typeof io !== "undefined") {
-  const socket = io();
+  const socket = io({ path: '/socket.io/' });
 
   socket.on("connect", () => {
     console.log("Connected to WebSocket server");
