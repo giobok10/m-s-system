@@ -1,3 +1,21 @@
+### 2025-09-07 (Sesión de Tarde)
+
+*   **Corrección Crítica de Validación de Stock (Mesero)**:
+    *   **Solucionado:** Se corrigió un bug crítico en la página de "Tomar Orden" que permitía agregar productos (simples, variantes, combos y extras) al carrito ignorando el stock disponible, lo que resultaba en inventario negativo.
+    *   **Causa:** La validación de stock se realizaba de forma incorrecta y no se forzaba al momento de agregar productos a la orden.
+    *   **Solución (Backend):** Se enriqueció la información de los productos `Combo` para que el frontend tenga todos los datos necesarios de sus componentes.
+    *   **Solución (Frontend):** Se reescribió por completo la lógica de JavaScript para el cálculo de stock. Ahora, una única función centralizada calcula el consumo de inventario en tiempo real, y la validación se aplica estrictamente al presionar "Agregar a Orden", bloqueando la acción si no hay existencias.
+
+*   **Mejoras en la Experiencia de Usuario (Mesero)**:
+    *   **Nueva Funcionalidad (Dashboard):** Se implementó un selector de vistas en el dashboard del mesero que permite alternar entre "Mis Órdenes" y "Todas las Órdenes" del día.
+    *   **Mejora Visual (Dashboard):** En la vista "Todas las Órdenes", ahora se muestra el nombre del mesero que tomó cada orden para una mejor identificación.
+    *   **Mejora Estructural (Dashboard):** Se rediseñó la plantilla del dashboard para que las órdenes activas y completadas se muestren siempre en secciones separadas y claras.
+
+*   **Notificaciones y Mejoras Menores**:
+    *   **Nueva Funcionalidad:** Se añadió una notificación sonora (`notification.mp3`) que se reproduce cada vez que el sistema muestra una alerta (ej. "orden lista"), mejorando el feedback en un entorno de restaurante.
+    *   **Solucionado (Favicon):** Se añadió un ícono de aplicación (`favicon.svg`) para eliminar los errores 404 en la consola del navegador.
+    *   **Solucionado (Accesibilidad):** Se corrigió una advertencia de accesibilidad (`aria-hidden`) en los modales de la página "Tomar Orden", asegurando que el foco del teclado se gestione correctamente.
+
 ### 2025-09-07
 
 *   **Corrección Crítica de WebSockets y Comunicación en Tiempo Real**:
