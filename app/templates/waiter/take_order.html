@@ -150,10 +150,24 @@ let orderItems = [];
 let currentProductData = null;
 let currentVariant = null;
 
-const quantityModal = new bootstrap.Modal(document.getElementById('quantityModal'));
+const quantityModalEl = document.getElementById('quantityModal');
+const quantityModal = new bootstrap.Modal(quantityModalEl);
 const variantModal = new bootstrap.Modal(document.getElementById('variantModal'));
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Accessibility fix for modal focus
+    let modalTriggerElement = null;
+    quantityModalEl.addEventListener('show.bs.modal', function (event) {
+        if (event.relatedTarget) {
+            modalTriggerElement = event.relatedTarget;
+        }
+    });
+    quantityModalEl.addEventListener('hidden.bs.modal', function () {
+        if (modalTriggerElement) {
+            modalTriggerElement.focus();
+        }
+    });
+
     document.querySelectorAll('.product-card').forEach(card => {
         card.addEventListener('click', function() {
             const product = JSON.parse(this.dataset.product);
