@@ -364,7 +364,7 @@ def reports():
 
     producto_mas_vendido_str = "N/A"
     if top_product_query:
-        producto_mas_vendido_str = f"{top_product_query.base_product_name} (Vendidos: {int(top_product_query.total_quantity)})
+        producto_mas_vendido_str = f"{top_product_query.base_product_name} (Vendidos: {int(top_product_query.total_quantity)})"
 
     grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
