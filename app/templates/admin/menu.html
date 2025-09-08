@@ -54,12 +54,24 @@
                             {% if product.category == 'Principal' %}
                                 <h6 class="text-muted small">Variantes:</h6>
                                 {% for variant in product.variants %}
+                                {% if variant.is_active %}
                                 <div class="d-flex justify-content-between align-items-center mb-1 p-1 bg-light rounded">
                                     <div>
                                         <span>{{ variant.name }}</span><br>
                                         <small class="text-muted">Q{{ "%.2f"|format(variant.price) }} | Consume: {{ variant.stock_consumption }}</small>
                                     </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-secondary edit-variant-btn" data-variant='{{ variant.to_dict()|tojson|safe }}'>
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <form method="POST" action="{{ url_for('admin.delete_variant', variant_id=variant.id) }}" class="d-inline" onsubmit="return confirm('¿Estás seguro de eliminar esta variante?')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
+                                {% endif %}
                                 {% endfor %}
                                 <button class="btn btn-sm btn-success mt-2" onclick="openAddVariantModal({{ product.id }})">
                                     <i class="fas fa-plus"></i> Agregar Variante
@@ -168,39 +180,13 @@
     </div>
 </div>
 
-<!-- Add Variant Modal (existing, no changes needed) -->
-<div class="modal fade" id="addVariantModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Agregar Variante</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" id="addVariantForm">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="variant_name" class="form-label">Nombre de la Variante</label>
-                        <input type="text" class="form-control" id="variant_name" name="variant_name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="variant_price" class="form-label">Precio</label>
-                        <input type="number" step="0.01" class="form-control" id="variant_price" name="variant_price" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="variant_consumption" class="form-label">Consumo de Stock</label>
-                        <input type="number" class="form-control" id="variant_consumption" name="variant_consumption" value="1" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Agregar Variante</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Hidden template for combo component row -->
+    document.querySelectorAll('.edit-product-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const productData = JSON.parse(this.dataset.product);
+            editProduct(productData);
+        });
+    });
+});
 <div id="combo-component-template" class="d-none">
     <div class="row align-items-center mb-2 component-row">
         <div class="col-7">

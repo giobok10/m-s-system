@@ -228,6 +228,56 @@ def add_variant(parent_id):
         db.session.rollback()
     return redirect(url_for('admin.menu'))
 
+
+@admin_bp.route('/edit_variant/<int:variant_id>', methods=['POST'])
+@login_required
+@admin_required
+def edit_variant(variant_id):
+    variant = Product.query.get_or_404(variant_id)
+    if not variant.parent_id:
+        flash('Operación no válida.', 'error')
+        return redirect(url_for('admin.menu'))
+    try:
+        name = bleach.clean(request.form.get('variant_name', '').strip())
+        price = float(request.form.get('variant_price', '0'))
+        stock_consumption = int(request.form.get('variant_consumption', '1'))
+
+        if not name or price <= 0 or stock_consumption <= 0:
+            flash('Datos de variante inválidos.', 'error')
+            return redirect(url_for('admin.menu'))
+
+        variant.name = name
+        variant.price = price
+        variant.stock_consumption = stock_consumption
+        db.session.commit()
+        flash('Variante actualizada exitosamente.', 'success')
+    except ValueError:
+        flash('Error en los datos numéricos de la variante.', 'error')
+        db.session.rollback()
+    except Exception as e:
+        flash(f'Error al actualizar la variante: {e}', 'error')
+        db.session.rollback()
+    return redirect(url_for('admin.menu'))
+
+
+@admin_bp.route('/delete_variant/<int:variant_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_variant(variant_id):
+    variant = Product.query.get_or_404(variant_id)
+    if not variant.parent_id:
+        flash('Operación no válida.', 'error')
+        return redirect(url_for('admin.menu'))
+    try:
+        variant.is_active = False
+        db.session.commit()
+        flash('Variante eliminada exitosamente.', 'success')
+    except Exception as e:
+        flash(f'Error al eliminar la variante: {e}', 'error')
+        db.session.rollback()
+    return redirect(url_for('admin.menu'))
+
+
 @admin_bp.route('/delete_product/<int:product_id>', methods=['POST'])
 @login_required
 @admin_required
@@ -314,7 +364,7 @@ def reports():
 
     producto_mas_vendido_str = "N/A"
     if top_product_query:
-        producto_mas_vendido_str = f"{top_product_query.base_product_name} (Vendidos: {int(top_product_query.total_quantity)})"
+        producto_mas_vendido_str = f"{top_product_query.base_product_name} (Vendidos: {int(top_product_query.total_quantity)})
 
     grouping_expression = db.func.date_trunc('day', Order.created_at.op('AT TIME ZONE')('America/Guatemala'))
     top_day_query = db.session.query(
@@ -486,4 +536,3 @@ def daily_close():
         return response
 
     return render_template('admin/daily_close.html', total_sales=total_sales, daily_report=daily_report, today_date=today_date_str, orders_data=orders_data)
-
