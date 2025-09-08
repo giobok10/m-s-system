@@ -39,7 +39,7 @@ class Product(db.Model):
 
     components = db.relationship('ComboItem', foreign_keys=[ComboItem.combo_product_id], lazy='dynamic', cascade="all, delete-orphan")
     parent_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=True)
-    variants = db.relationship('Product', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
+    variants = db.relationship('Product', backref=db.backref('parent', remote_side=[id]), lazy='dynamic', primaryjoin='and_(Product.parent_id == Product.id, Product.is_active == True)')
     stock_consumption = db.Column(db.Integer, nullable=False, default=1)
 
     @property

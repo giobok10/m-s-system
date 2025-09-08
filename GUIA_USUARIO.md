@@ -86,10 +86,23 @@ Esta función te permite vender un paquete de varios productos a un precio fijo,
 3. Modificar los datos necesarios
 4. Hacer clic en **"Actualizar"**
 
+#### Editar una Variante
+1. En la página de Menú, busca el producto principal que contiene la variante.
+2. Al lado del nombre de la variante que deseas modificar, haz clic en el ícono de editar (lápiz).
+3. Se abrirá una ventana emergente con los datos de la variante.
+4. Modifica el nombre, el precio o el consumo de stock.
+5. Haz clic en **"Actualizar Variante"** para guardar los cambios.
+
 #### Eliminar Productos
 1. Buscar el producto en la lista
 2. Hacer clic en el ícono de eliminar (basura)
 3. Confirmar la eliminación
+
+#### Eliminar una Variante
+1. En la página de Menú, busca el producto principal que contiene la variante.
+2. Al lado del nombre de la variante que deseas eliminar, haz clic en el ícono de eliminar (basura).
+3. Confirma la eliminación. La variante desaparecerá, pero el producto base permanecerá.
+
 
 ⚠️ **Nota**: Los productos eliminados se marcan como inactivos, no se borran permanentemente.
 

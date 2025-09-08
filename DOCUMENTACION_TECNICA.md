@@ -113,6 +113,14 @@
 - **`order_status_update`**: Notifica a meseros y cocineros de cambios de estado de una orden (ej. 'en preparación', 'listo').
 - **`stock_update`**: Notifica a todos de cambios en el stock.
 
+## Rutas Principales (Endpoints)
+
+Además de las rutas obvias para servir las páginas, existen las siguientes rutas clave que manejan la lógica de negocio:
+
+- **`POST /admin/variant/add/<int:product_id>`**: Añade una nueva variante a un producto base.
+- **`POST /admin/variant/edit/<int:variant_id>`**: Actualiza los datos de una variante existente.
+- **`POST /admin/variant/delete/<int:variant_id>`**: Elimina una variante de producto.
+
 ## Flujo de Datos
 
 ### Proceso de Orden

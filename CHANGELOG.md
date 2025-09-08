@@ -1,3 +1,16 @@
+### 2025-09-08
+
+*   **Corrección de Lógica (Mesero)**:
+    *   **Solucionado:** Se corrigió un bug crítico donde las variantes de productos que habían sido eliminadas por el administrador seguían apareciendo como opciones seleccionables en la página de "Tomar Pedido" del mesero. 
+    *   **Causa:** La consulta a la base de datos no estaba filtrando las variantes por su estado `is_active`.
+    *   **Solución:** Se modificó la relación en el modelo `Product` (`app/models.py`) para que la carga de variantes siempre excluya las que están inactivas. El cambio se aplicó a nivel de base de datos para garantizar consistencia en todo el sistema.
+*   **Nueva Funcionalidad: Gestión de Variantes (Administrador)**:
+    *   **Añadido:** Se implementó la funcionalidad para editar y eliminar las variantes de los productos de categoría "Principal" de forma individual.
+    *   **Mejora:** En la página de "Gestión de Menú", ahora aparecen botones de "Editar" y "Eliminar" junto a cada variante, permitiendo modificar su nombre, precio y consumo de stock, o eliminarla sin necesidad de borrar el producto base.
+*   **Corrección de Errores (Frontend)**:
+    *   **Solucionado:** Se corrigió un error crítico en JavaScript que impedía abrir el modal para "Agregar Variante" a un producto.
+    *   **Solucionado:** Se corrigió el botón de "Editar Variante", que no tenía ninguna acción asignada. Se reconstruyó el archivo `menu.html` para restaurar la estructura de los modales y la lógica de JavaScript que se había dañado.
+
 ### 2025-09-07 (Sesión de Tarde)
 
 *   **Corrección Crítica de Validación de Stock (Mesero)**:
