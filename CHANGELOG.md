@@ -1,9 +1,9 @@
 ### 2025-09-08
 
-*   **Corrección de Lógica (Mesero)**:
-    *   **Solucionado:** Se corrigió un bug crítico donde las variantes de productos que habían sido eliminadas por el administrador seguían apareciendo como opciones seleccionables en la página de "Tomar Pedido" del mesero. 
-    *   **Causa:** La consulta a la base de datos no estaba filtrando las variantes por su estado `is_active`.
-    *   **Solución:** Se modificó la relación en el modelo `Product` (`app/models.py`) para que la carga de variantes siempre excluya las que están inactivas. El cambio se aplicó a nivel de base de datos para garantizar consistencia en todo el sistema.
+*   **Corrección Definitiva de Lógica (Mesero)**:
+    *   **Solucionado:** Se corrigió de manera definitiva el bug que mostraba variantes eliminadas en la vista del mesero.
+    *   **Causa Raíz:** La primera corrección generaba una advertencia de SQLAlchemy (`SAWarning`) y no filtraba los datos correctamente debido a una consulta ambigua.
+    *   **Solución:** Se reescribió la relación en el modelo `Product` (`app/models.py`) usando la sintaxis `remote()` recomendada por la advertencia. Esto elimina la ambigüedad y asegura que la consulta a la base de datos filtre las variantes inactivas de forma correcta y eficiente en todo el sistema.
 *   **Nueva Funcionalidad: Gestión de Variantes (Administrador)**:
     *   **Añadido:** Se implementó la funcionalidad para editar y eliminar las variantes de los productos de categoría "Principal" de forma individual.
     *   **Mejora:** En la página de "Gestión de Menú", ahora aparecen botones de "Editar" y "Eliminar" junto a cada variante, permitiendo modificar su nombre, precio y consumo de stock, o eliminarla sin necesidad de borrar el producto base.
